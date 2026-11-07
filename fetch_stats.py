@@ -109,18 +109,23 @@ def parse_youtube_views(data):
 
 
 # ---------------------------------------------------------- jetons chiffrés
-def load_tokens():
-    key = os.environ.get("TOKENS_KEY")
-    if not key or not os.path.exists(TOKENS):
-        return {}
+def _fernet():
+    """TOKENS_KEY = phrase secrète libre choisie par l'utilisateur."""
+    import base64
+    import hashlib
     from cryptography.fernet import Fernet
-    return json.loads(Fernet(key.encode()).decrypt(open(TOKENS, "rb").read()))
+    raw = hashlib.sha256(os.environ["TOKENS_KEY"].encode()).digest()
+    return Fernet(base64.urlsafe_b64encode(raw))
+
+
+def load_tokens():
+    if not os.environ.get("TOKENS_KEY") or not os.path.exists(TOKENS):
+        return {}
+    return json.loads(_fernet().decrypt(open(TOKENS, "rb").read()))
 
 
 def save_tokens(tokens):
-    from cryptography.fernet import Fernet
-    key = os.environ["TOKENS_KEY"]
-    open(TOKENS, "wb").write(Fernet(key.encode()).encrypt(json.dumps(tokens).encode()))
+    open(TOKENS, "wb").write(_fernet().encrypt(json.dumps(tokens).encode()))
 
 
 # ----------------------------------------------------------------- TikTok
@@ -175,12 +180,15 @@ def instagram_latest_views(tokens):
     if not videos:
         raise RuntimeError("Instagram: aucune vidéo")
     latest = max(videos, key=lambda m: m["timestamp"])
-    j = requests.get(f"{base}/{latest['id']}/insights", params={
-        "metric": "views", "access_token": ig["token"]}, timeout=20).json()
     views = None
-    for d in j.get("data", []):
-        if d.get("name") == "views":
-            views = d["values"][0]["value"]
+    for metric in ("views", "plays"):  # « plays » = ancien nom pour les Reels
+        j = requests.get(f"{base}/{latest['id']}/insights", params={
+            "metric": metric, "access_token": ig["token"]}, timeout=20).json()
+        for d in j.get("data", []):
+            if d.get("name") == metric:
+                views = d["values"][0]["value"]
+        if views is not None:
+            break
     if views is None:
         log(f"Instagram insights: {j}")
     me = requests.get(f"{base}/me", params={"fields": "followers_count",
