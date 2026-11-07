@@ -1,7 +1,7 @@
 {
  "spec": 1,
  "theme": {
-  "id": "avs2",
+  "id": "avs3",
   "name": "Avinathan",
   "author": "C",
   "version": "1"
@@ -14,7 +14,7 @@
  "data": [
   {
    "id": "s",
-   "url": "http://cdn.jsdelivr.net/gh/fowlc78/smalltv-stats@main/stats.json",
+   "url": "http://raw.githack.com/fowlc78/smalltv-stats/main/stats.json",
    "interval": 300,
    "fields": [
     {

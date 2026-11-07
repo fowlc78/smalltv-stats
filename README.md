@@ -7,5 +7,6 @@ affichés sur une GeekMagic SmallTV-Ultra sous [smalltv-mod](https://github.com/
 - `.github/workflows/stats.yml` : exécution automatique toutes les 20 min
 - `theme/` : écran de la box (`theme.json`, empaqueté en `.stheme` par `pack.py`)
 
-La box lit `https://raw.githubusercontent.com/fowlc78/smalltv-stats/main/stats.json`.
+La box lit `http://raw.githack.com/fowlc78/smalltv-stats/main/stats.json` (HTTP simple : l'ESP8266 n'a pas assez de mémoire pour HTTPS).
+Relais de secours testé : `http://api.allorigins.win/raw?url=https://raw.githubusercontent.com/fowlc78/smalltv-stats/main/stats.json`.
 Les jetons TikTok/Instagram sont stockés chiffrés dans `tokens.enc` (clé dans le secret `TOKENS_KEY`).
