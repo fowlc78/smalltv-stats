@@ -1,0 +1,191 @@
+{
+ "spec": 1,
+ "theme": {
+  "id": "avst",
+  "name": "Avinathan",
+  "author": "C",
+  "version": "1"
+ },
+ "display": {
+  "width": 240,
+  "height": 240,
+  "background": "#0e0e12"
+ },
+ "data": [
+  {
+   "id": "s",
+   "url": "https://raw.githubusercontent.com/fowlc78/smalltv-stats/main/stats.json",
+   "interval": 300,
+   "insecureTls": true,
+   "fields": [
+    {
+     "id": "yt",
+     "path": "yt"
+    },
+    {
+     "id": "ytf",
+     "path": "ytf"
+    },
+    {
+     "id": "tt",
+     "path": "tt"
+    },
+    {
+     "id": "ttf",
+     "path": "ttf"
+    },
+    {
+     "id": "ig",
+     "path": "ig"
+    },
+    {
+     "id": "igf",
+     "path": "igf"
+    },
+    {
+     "id": "t",
+     "path": "t"
+    }
+   ]
+  }
+ ],
+ "layers": [
+  {
+   "id": "a",
+   "type": "text",
+   "x": 120,
+   "y": 4,
+   "anchor": "top-center",
+   "value": "DERNIERE VIDEO",
+   "size": 10,
+   "color": "#8c8ca0"
+  },
+  {
+   "id": "b",
+   "type": "shape",
+   "shape": "rectangle",
+   "x": 6,
+   "y": 18,
+   "width": 228,
+   "height": 66,
+   "cornerRadius": 10,
+   "fill": "#1c1c24"
+  },
+  {
+   "id": "c",
+   "type": "text",
+   "x": 18,
+   "y": 26,
+   "value": "YouTube",
+   "size": 12,
+   "color": "#ff4040"
+  },
+  {
+   "id": "d",
+   "type": "text",
+   "x": 18,
+   "y": 52,
+   "value": "{s.ytf} abo.",
+   "size": 10,
+   "color": "#a0a0b4"
+  },
+  {
+   "id": "e",
+   "type": "text",
+   "x": 226,
+   "y": 46,
+   "anchor": "center-right",
+   "value": "{s.yt}",
+   "size": 26,
+   "color": "#f5f5fa"
+  },
+  {
+   "id": "f",
+   "type": "shape",
+   "shape": "rectangle",
+   "x": 6,
+   "y": 90,
+   "width": 228,
+   "height": 66,
+   "cornerRadius": 10,
+   "fill": "#1c1c24"
+  },
+  {
+   "id": "g",
+   "type": "text",
+   "x": 18,
+   "y": 98,
+   "value": "TikTok",
+   "size": 12,
+   "color": "#25f4ee"
+  },
+  {
+   "id": "h",
+   "type": "text",
+   "x": 18,
+   "y": 124,
+   "value": "{s.ttf} abo.",
+   "size": 10,
+   "color": "#a0a0b4"
+  },
+  {
+   "id": "i",
+   "type": "text",
+   "x": 226,
+   "y": 118,
+   "anchor": "center-right",
+   "value": "{s.tt}",
+   "size": 26,
+   "color": "#f5f5fa"
+  },
+  {
+   "id": "j",
+   "type": "shape",
+   "shape": "rectangle",
+   "x": 6,
+   "y": 162,
+   "width": 228,
+   "height": 66,
+   "cornerRadius": 10,
+   "fill": "#1c1c24"
+  },
+  {
+   "id": "k",
+   "type": "text",
+   "x": 18,
+   "y": 170,
+   "value": "Instagram",
+   "size": 12,
+   "color": "#e150aa"
+  },
+  {
+   "id": "l",
+   "type": "text",
+   "x": 18,
+   "y": 196,
+   "value": "{s.igf} abo.",
+   "size": 10,
+   "color": "#a0a0b4"
+  },
+  {
+   "id": "m",
+   "type": "text",
+   "x": 226,
+   "y": 190,
+   "anchor": "center-right",
+   "value": "{s.ig}",
+   "size": 26,
+   "color": "#f5f5fa"
+  },
+  {
+   "id": "n",
+   "type": "text",
+   "x": 120,
+   "y": 239,
+   "anchor": "bottom-center",
+   "value": "maj {s.t}",
+   "size": 8,
+   "color": "#5a5a6e"
+  }
+ ]
+}
