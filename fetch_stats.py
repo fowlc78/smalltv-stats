@@ -30,26 +30,36 @@ def log(*a):
 
 
 # ---------------------------------------------------------------- YouTube
-def youtube_latest_views(channel_id):
-    """Lit la page « Vidéos » de la chaîne (pas de clé API nécessaire)."""
-    url = f"https://www.youtube.com/channel/{channel_id}/videos?hl=en&gl=US"
+def _yt_page(url):
     r = requests.get(url, headers={"User-Agent": UA, "Accept-Language": "en-US"},
                      cookies={"SOCS": "CAI", "CONSENT": "YES+"}, timeout=20)
     r.raise_for_status()
     m = re.search(r"var ytInitialData = (\{.*?\});</script>", r.text, re.S)
     if not m:
-        raise RuntimeError(f"ytInitialData introuvable (HTTP {r.status_code}, {r.url[:60]})")
-    data = json.loads(m.group(1))
+        raise RuntimeError(f"ytInitialData introuvable (HTTP {r.status_code})")
+    return r.text, json.loads(m.group(1))
+
+
+def youtube_latest_views(channel_id):
+    """Vues du dernier envoi (vidéo OU Short) + abonnés, sans clé API.
+
+    La playlist « UU… » liste tous les envois de la chaîne, le plus récent en premier.
+    """
+    raw, data = _yt_page(f"https://www.youtube.com/playlist?list=UU{channel_id[2:]}&hl=en&gl=US")
     try:
         views = parse_youtube_views(data)
     except RuntimeError:
-        # Mise en page différente : 1re mention « N views » dans la page brute
-        mv = re.search(r'"(?:simpleText|content|text)":"((?:[\d.,\u202f\xa0 ]+[KkMm]?|No) views?)"', r.text)
+        mv = re.search(r'"(?:simpleText|content|text)":"((?:[\d.,\u202f\xa0 ]+[KkMm]?|No) views?)"', raw)
         if not mv:
-            log("YouTube: début de la page =", r.text[:200].replace("\n", " "))
             raise
         views = _digits(mv.group(1))
-    return views, parse_youtube_subs(data)
+    subs = None
+    try:
+        _, chan = _yt_page(f"https://www.youtube.com/channel/{channel_id}?hl=en&gl=US")
+        subs = parse_youtube_subs(chan)
+    except Exception as e:
+        log(f"[ytf] échec : {e}")
+    return views, subs
 
 
 def parse_youtube_subs(data):
@@ -108,6 +118,10 @@ def parse_youtube_views(data):
                 if re.fullmatch(r"\s*[\d.,\s \xa0]+[KkMm]?\s*(views?|vues?)?\s*", p, re.I) \
                         or re.match(r"no views", p, re.I):
                     return _digits(p)
+        if "playlistVideoRenderer" in node:
+            runs = node["playlistVideoRenderer"].get("videoInfo", {}).get("runs", [])
+            if runs:
+                return _digits(runs[0].get("text", ""))
         if "videoRenderer" in node or "gridVideoRenderer" in node:
             v = node.get("videoRenderer") or node.get("gridVideoRenderer")
             vc = v.get("viewCountText", {})
