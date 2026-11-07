@@ -38,9 +38,18 @@ def youtube_latest_views(channel_id):
     r.raise_for_status()
     m = re.search(r"var ytInitialData = (\{.*?\});</script>", r.text, re.S)
     if not m:
-        raise RuntimeError("ytInitialData introuvable")
+        raise RuntimeError(f"ytInitialData introuvable (HTTP {r.status_code}, {r.url[:60]})")
     data = json.loads(m.group(1))
-    return parse_youtube_views(data), parse_youtube_subs(data)
+    try:
+        views = parse_youtube_views(data)
+    except RuntimeError:
+        # Mise en page différente : 1re mention « N views » dans la page brute
+        mv = re.search(r'"(?:simpleText|content|text)":"((?:[\d.,\u202f\xa0 ]+[KkMm]?|No) views?)"', r.text)
+        if not mv:
+            log("YouTube: début de la page =", r.text[:200].replace("\n", " "))
+            raise
+        views = _digits(mv.group(1))
+    return views, parse_youtube_subs(data)
 
 
 def parse_youtube_subs(data):
