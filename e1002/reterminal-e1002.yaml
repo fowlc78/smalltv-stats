@@ -90,6 +90,48 @@ globals:
   - id: s_date
     type: std::string
     initial_value: '""'
+  - id: s_ytd
+    type: std::string
+    initial_value: '""'
+  - id: s_ytl
+    type: std::string
+    initial_value: '""'
+  - id: s_ytc
+    type: std::string
+    initial_value: '""'
+  - id: s_yta
+    type: std::string
+    initial_value: '""'
+  - id: s_ttd
+    type: std::string
+    initial_value: '""'
+  - id: s_ttl
+    type: std::string
+    initial_value: '""'
+  - id: s_ttc
+    type: std::string
+    initial_value: '""'
+  - id: s_tta
+    type: std::string
+    initial_value: '""'
+  - id: s_igd
+    type: std::string
+    initial_value: '""'
+  - id: s_igl
+    type: std::string
+    initial_value: '""'
+  - id: s_igc
+    type: std::string
+    initial_value: '""'
+  - id: s_iga
+    type: std::string
+    initial_value: '""'
+  - id: s_tot
+    type: std::string
+    initial_value: '""'
+  - id: s_totd
+    type: std::string
+    initial_value: '""'
   - id: s_hour
     type: std::string
     initial_value: '""'
@@ -199,6 +241,20 @@ script:
                           id(s_quote) = root["q"] | "";
                           id(s_ref) = root["r"] | "";
                           id(s_date) = root["d"] | "";
+                          id(s_ytd) = root["ytd"] | "";
+                          id(s_ytl) = root["ytl"] | "";
+                          id(s_ytc) = root["ytc"] | "";
+                          id(s_yta) = root["yta"] | "";
+                          id(s_ttd) = root["ttd"] | "";
+                          id(s_ttl) = root["ttl"] | "";
+                          id(s_ttc) = root["ttc"] | "";
+                          id(s_tta) = root["tta"] | "";
+                          id(s_igd) = root["igd"] | "";
+                          id(s_igl) = root["igl"] | "";
+                          id(s_igc) = root["igc"] | "";
+                          id(s_iga) = root["iga"] | "";
+                          id(s_tot) = root["tot"] | "";
+                          id(s_totd) = root["totd"] | "";
                           id(s_hour) = root["h"] | "";
                           return true;
                         });
@@ -218,6 +274,10 @@ script:
           if (id(page) == 1) {
             mix(id(s_yt)); mix(id(s_ytf)); mix(id(s_tt));
             mix(id(s_ttf)); mix(id(s_ig)); mix(id(s_igf));
+            mix(id(s_ytd)); mix(id(s_ytl)); mix(id(s_ytc)); mix(id(s_yta));
+            mix(id(s_ttd)); mix(id(s_ttl)); mix(id(s_ttc)); mix(id(s_tta));
+            mix(id(s_igd)); mix(id(s_igl)); mix(id(s_igc)); mix(id(s_iga));
+            mix(id(s_tot)); mix(id(s_totd));
           } else {
             mix(id(s_quote)); mix(id(s_ref));
           }
@@ -318,17 +378,33 @@ font:
     id: i_meta
     size: 16
     glyphs: *latin
+  - file: { type: gfonts, family: Inter, weight: 600 }
+    id: i_meta_b
+    size: 16
+    glyphs: *latin
   - file: { type: gfonts, family: Inter, weight: 500 }
-    id: i_text
-    size: 22
+    id: i_label
+    size: 18
     glyphs: *latin
   - file: { type: gfonts, family: Inter, weight: 600 }
-    id: i_name
-    size: 30
+    id: i_label_b
+    size: 18
+    glyphs: *latin
+  - file: { type: gfonts, family: Inter, weight: 500 }
+    id: i_text
+    size: 20
+    glyphs: *latin
+  - file: { type: gfonts, family: Inter, weight: 700 }
+    id: i_title
+    size: 24
+    glyphs: *latin
+  - file: { type: gfonts, family: Inter, weight: 700 }
+    id: i_value
+    size: 28
     glyphs: *latin
   - file: { type: gfonts, family: Inter, weight: 800 }
-    id: i_fig_xl
-    size: 88
+    id: i_fig
+    size: 76
     glyphs: "0123456789 .,kM-–"
   # Sceau « Kongzi » (le nom chinois de Confucius), en grand et en petit
   - file: { type: gfonts, family: Noto Serif SC, weight: 700 }
@@ -339,6 +415,18 @@ font:
     id: f_seal_s
     size: 40
     glyphs: "孔子"
+
+# Logos des réseaux (icônes libres Simple Icons, CC0), en une couleur
+image:
+  - file: logos/youtube.png
+    id: logo_youtube
+    type: BINARY
+  - file: logos/tiktok.png
+    id: logo_tiktok
+    type: BINARY
+  - file: logos/instagram.png
+    id: logo_instagram
+    type: BINARY
 
 display:
   - platform: epaper_spi
@@ -441,24 +529,54 @@ display:
           it.print(g.x0, g.base_y, id(g_ref), RED, TextAlign::BASELINE_LEFT, id(s_ref).c_str());
         status(g.x1, g.base_y);
       } else {
-        // ---- Les réseaux sociaux : une ligne par réseau, lisible de loin
-        const int M = 40, R = W - M;
+        // ---- Les réseaux sociaux : une colonne par réseau, tête en couleur, détails sur blanc
         auto val = [](const std::string &s) { return s == "--" || s.empty() ? std::string("–") : s; };
-        struct Net { const char *name; Color ink; std::string views; std::string subs; };
-        const Net nets[3] = {
-          {"YouTube", RED, val(id(s_yt)), val(id(s_ytf))},
-          {"TikTok", BLACK, val(id(s_tt)), val(id(s_ttf))},
-          {"Instagram", BLUE, val(id(s_ig)), val(id(s_igf))},
+        struct Net {
+          const char *name; Color ink; image::Image *logo;
+          std::string subs, delta, views, likes, comments, age;
         };
-        it.print(M, 42, id(g24), BLACK, TextAlign::BASELINE_LEFT, "Vues de la dernière vidéo");
-        status(R, 42);
-        it.filled_rectangle(M, 54, R - M, 2, BLACK);
+        const Net nets[3] = {
+          {"YouTube", RED, id(logo_youtube), val(id(s_ytf)), id(s_ytd), val(id(s_yt)), val(id(s_ytl)), val(id(s_ytc)), id(s_yta)},
+          {"TikTok", BLACK, id(logo_tiktok), val(id(s_ttf)), id(s_ttd), val(id(s_tt)), val(id(s_ttl)), val(id(s_ttc)), id(s_tta)},
+          {"Instagram", BLUE, id(logo_instagram), val(id(s_igf)), id(s_igd), val(id(s_ig)), val(id(s_igl)), val(id(s_igc)), id(s_iga)},
+        };
         for (int i = 0; i < 3; i++) {
-          const int cy = 124 + i * 126;
-          if (i > 0) it.filled_rectangle(M, cy - 63, R - M, 1, BLACK);
-          it.filled_rectangle(M, cy - 26, 16, 16, nets[i].ink);
-          it.print(M + 30, cy - 18, id(i_name), BLACK, TextAlign::CENTER_LEFT, nets[i].name);
-          it.printf(M + 30, cy + 22, id(i_text), BLACK, TextAlign::CENTER_LEFT, "%s abonnés", nets[i].subs.c_str());
-          it.print(R, cy, id(i_fig_xl), BLACK, TextAlign::CENTER_RIGHT, nets[i].views.c_str());
+          const Net &n = nets[i];
+          const int x = 16 + i * 260, w = 248, l = x + 20, r = x + w - 20;
+          it.filled_rectangle(x, 16, w, 384, n.ink);
+          it.filled_rectangle(x + 3, 216, w - 6, 181, WHITE);
+          // Tête : logo, nom, abonnés
+          it.image(l, 30, n.logo, WHITE, n.ink);
+          it.print(l + 44, 46, id(i_title), WHITE, TextAlign::CENTER_LEFT, n.name);
+          it.print(l, 124, id(i_fig), WHITE, TextAlign::CENTER_LEFT, n.subs.c_str());
+          it.print(l, 186, id(i_label_b), WHITE, TextAlign::CENTER_LEFT, "abonnés");
+          if (!n.delta.empty())
+            it.printf(r, 186, id(i_label_b), WHITE, TextAlign::CENTER_RIGHT, "%s en 7 j", n.delta.c_str());
+          // Détails de la dernière vidéo
+          if (n.age.empty())
+            it.print(l, 244, id(i_meta_b), BLACK, TextAlign::CENTER_LEFT, "Dernière vidéo");
+          else
+            it.printf(l, 244, id(i_meta_b), BLACK, TextAlign::CENTER_LEFT, "Dernière vidéo, %s", n.age.c_str());
+          const char *labels[3] = {"vues", "j’aime", "commentaires"};
+          const std::string *values[3] = {&n.views, &n.likes, &n.comments};
+          for (int j = 0; j < 3; j++) {
+            const int y = 286 + j * 40;
+            it.print(l, y, id(i_label), BLACK, TextAlign::CENTER_LEFT, labels[j]);
+            it.print(r, y, id(i_value), BLACK, TextAlign::CENTER_RIGHT, values[j]->c_str());
+            it.filled_rectangle(l, y + 20, r - l, 1, BLACK);
+          }
         }
+        // Pied : total des abonnés, évolution, date et heure du relevé
+        std::string total = val(id(s_tot)) + " abonnés au total";
+        it.print(16, 440, id(i_value), BLACK, TextAlign::CENTER_LEFT, total.c_str());
+        if (!id(s_totd).empty())
+          it.printf(16 + text_width(total, id(i_value)) + 16, 442, id(i_text), BLACK, TextAlign::CENTER_LEFT,
+                    "%s en 7 jours", id(s_totd).c_str());
+        float v = id(battery_voltage).state;
+        if (!id(data_ok))
+          it.print(784, 442, id(i_meta), RED, TextAlign::CENTER_RIGHT, "hors ligne");
+        else if (!std::isnan(v) && v > 2.8f && v < 3.45f)
+          it.print(784, 442, id(i_meta), RED, TextAlign::CENTER_RIGHT, "batterie faible");
+        else
+          it.printf(784, 442, id(i_meta), BLACK, TextAlign::CENTER_RIGHT, "%s, %s", id(s_date).c_str(), id(s_hour).c_str());
       }
