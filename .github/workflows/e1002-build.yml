@@ -1,0 +1,28 @@
+name: Vérifier le firmware E1002
+
+on:
+  pull_request:
+    paths: ["e1002/**", ".github/workflows/e1002-build.yml"]
+  push:
+    branches: [main]
+    paths: ["e1002/**", ".github/workflows/e1002-build.yml"]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install esphome==2026.11.0
+      - name: Compiler (Wi-Fi factice, simple vérification)
+        working-directory: e1002
+        run: |
+          cp secrets.yaml.example secrets.yaml
+          esphome compile reterminal-e1002.yaml

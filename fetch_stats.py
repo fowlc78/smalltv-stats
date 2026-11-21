@@ -23,6 +23,8 @@ UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "stats.json")
 TOKENS = os.path.join(HERE, "tokens.enc")
+E1002_OUT = os.path.join(HERE, "e1002.json")
+QUOTES = os.path.join(HERE, "e1002", "confucius.json")
 
 
 def log(*a):
@@ -219,6 +221,27 @@ def instagram_latest_views(tokens):
     return views, me.get("followers_count")
 
 
+# ------------------------------------------------- reTerminal E1002
+def quote_of_the_day(day):
+    """Une citation par jour : la liste tourne en boucle, dans l'ordre du fichier."""
+    quotes = json.load(open(QUOTES, encoding="utf-8"))
+    return quotes[day.toordinal() % len(quotes)]
+
+
+def french_spaces(text):
+    """Espace insécable avant ; : ? ! » et après « (évite une ponctuation seule en début de ligne)."""
+    text = re.sub(r" ([;:?!»])", "\u00a0\\1", text)
+    return text.replace("« ", "«\u00a0")
+
+
+def write_e1002(stats, now):
+    """Fichier lu par le reTerminal E1002 : mêmes chiffres + la citation du jour."""
+    quote = quote_of_the_day(now.date())
+    data = dict(stats, q=french_spaces(quote["q"]), r=quote["r"])
+    json.dump(data, open(E1002_OUT, "w", encoding="utf-8"),
+              ensure_ascii=False, separators=(",", ":"))
+
+
 # ------------------------------------------------------------------- main
 def fmt(n):
     """Texte court pour l'écran (police ASCII de la box)."""
@@ -277,8 +300,13 @@ def main():
         log(f"[ig] échec : {e}")
     put("ig", lambda: ig.get("v"))
     put("igf", lambda: ig.get("f"))
-    out["t"] = datetime.now(ZoneInfo("Europe/Paris")).strftime("%d/%m %H:%M")
+    now = datetime.now(ZoneInfo("Europe/Paris"))
+    out["t"] = now.strftime("%d/%m %H:%M")
     json.dump(out, open(OUT, "w"), separators=(",", ":"))
+    try:
+        write_e1002(out, now)
+    except Exception as e:
+        log(f"[e1002] échec : {e}")
     if tokens and os.environ.get("TOKENS_KEY"):
         save_tokens(tokens)
     log(json.dumps(out))
