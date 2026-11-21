@@ -14,20 +14,19 @@ Les jetons TikTok/Instagram sont stockés chiffrés dans `tokens.enc` (clé dans
 ## reTerminal E1002 (e-paper couleur 7,3")
 
 Le dossier `e1002/` contient la configuration [ESPHome](https://esphome.io) du reTerminal E1002. Elle affiche
-deux modules, répartis sur trois écrans (n'importe quel bouton passe au suivant) :
+deux pages, et n'importe quel bouton passe de l'une à l'autre :
 
-1. la page du jour : un passage de Confucius, puis le relevé des réseaux sociaux en tableau (écran par défaut) ;
-2. le relevé des réseaux sociaux en grand, lisible de loin ;
-3. le passage du jour seul, en grand.
+1. le passage de Confucius du jour, toujours en entier : grand sceau rouge 孔子 à gauche, et un texte qui
+   rétrécit (puis une mise en page plus large) quand le passage est long ;
+2. les réseaux sociaux.
 
-Le design suit l'idée d'une page imprimée : fond blanc, encre noire, filets fins, EB Garamond pour le texte,
-Inter pour les chiffres, et le rouge comme seule couleur d'accent.
-
-- `fetch_stats.py` écrit aussi `e1002.json` : les mêmes chiffres que `stats.json`, plus le passage du jour et la date.
+- `fetch_stats.py` écrit aussi `e1002.json` : les mêmes chiffres que `stats.json`, plus le passage du jour, la date
+  et des infos en plus par réseau (j'aime, commentaires, date et nombre de vidéos, évolution des abonnés sur
+  7 jours, total). L'historique des abonnés est tenu dans `e1002/history.json`.
 - `e1002/confucius.json` : le texte intégral des Entretiens, de la Grande Étude et de l'Invariable Milieu
-  (traduction de Séraphin Couvreur, 1895, domaine public, lue sur Wikisource). Un passage par jour, dans l'ordre,
-  en boucle ; les passages longs sont répartis sur plusieurs jours. Le fichier est reconstruit par
-  `e1002/build_confucius.py` (workflow « Reconstruire les citations de Confucius »).
+  (traduction de Séraphin Couvreur, 1895, domaine public, lue sur Wikisource), soit 618 passages. Un passage
+  entier par jour, dans l'ordre, en boucle. Le fichier est reconstruit par `e1002/build_confucius.py`
+  (workflow « Reconstruire les citations de Confucius »).
 - `e1002/reterminal-e1002.yaml` : le firmware. Réveil toutes les 30 min (`sleep_minutes`), l'écran n'est
   redessiné que si quelque chose a changé, pour ménager la batterie.
 
