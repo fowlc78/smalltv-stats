@@ -13,7 +13,7 @@ import os
 import re
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import requests
@@ -25,6 +25,10 @@ OUT = os.path.join(HERE, "stats.json")
 TOKENS = os.path.join(HERE, "tokens.enc")
 E1002_OUT = os.path.join(HERE, "e1002.json")
 QUOTES = os.path.join(HERE, "e1002", "confucius.json")
+HISTORY = os.path.join(HERE, "e1002", "history.json")
+# Infos supplémentaires pour le reTerminal E1002 (j'aime, commentaires, date, nombre de vidéos).
+# Remplies au passage par les fonctions ci-dessous ; la SmallTV ne les lit pas.
+EXTRA = {}
 
 
 def log(*a):
@@ -55,6 +59,13 @@ def youtube_latest_views(channel_id):
         if not mv:
             raise
         views = _digits(mv.group(1))
+    try:
+        mn = re.search(r'"([\d,.\u202f\xa0 ]+) videos?"', raw)
+        if mn:
+            EXTRA["ytn"] = _digits(mn.group(1))
+        youtube_feed(channel_id)
+    except Exception as e:
+        log(f"[yt+] échec : {e}")
     subs = None
     try:
         _, chan = _yt_page(f"https://www.youtube.com/channel/{channel_id}?hl=en&gl=US")
@@ -62,6 +73,32 @@ def youtube_latest_views(channel_id):
     except Exception as e:
         log(f"[ytf] échec : {e}")
     return views, subs
+
+
+def youtube_feed(channel_id):
+    """Flux public de la chaîne : date et nombre de « j'aime » du dernier envoi."""
+    r = requests.get(f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}",
+                     headers={"User-Agent": UA}, timeout=20)
+    r.raise_for_status()
+    parse_youtube_feed(r.text)
+
+
+def parse_youtube_feed(xml):
+    entries = re.findall(r"<entry>(.*?)</entry>", xml, re.S)
+    best = None
+    for e in entries:
+        pub = re.search(r"<published>([^<]+)</published>", e)
+        if not pub:
+            continue
+        ts = datetime.fromisoformat(pub.group(1).replace("Z", "+00:00")).timestamp()
+        if best is None or ts > best[0]:
+            best = (ts, e)
+    if not best:
+        return
+    EXTRA["yta"] = best[0]
+    likes = re.search(r'<media:starRating[^>]*\bcount="(\d+)"', best[1])
+    if likes:
+        EXTRA["ytl"] = int(likes.group(1))
 
 
 def parse_youtube_subs(data):
@@ -81,6 +118,8 @@ def tiktok_followers(username):
         raise RuntimeError("TikTok: données de profil introuvables")
     stats = (json.loads(m.group(1))["__DEFAULT_SCOPE__"]["webapp.user-detail"]
              ["userInfo"].get("stats", {}))
+    if stats.get("videoCount") is not None:
+        EXTRA["ttn"] = stats["videoCount"]
     return stats.get("followerCount")
 
 
@@ -173,14 +212,21 @@ def tiktok_latest_views(tokens):
                   refresh_token=j.get("refresh_token", tk["refresh_token"]),
                   expires_at=time.time() + int(j.get("expires_in", 86400)))
     r = requests.post(
-        "https://open.tiktokapis.com/v2/video/list/?fields=id,create_time,view_count",
+        "https://open.tiktokapis.com/v2/video/list/"
+        "?fields=id,create_time,view_count,like_count,comment_count",
         headers={"Authorization": f"Bearer {tk['access_token']}"},
         json={"max_count": 20}, timeout=20)
     vids = r.json().get("data", {}).get("videos", [])
     if not vids:
         raise RuntimeError(f"TikTok: {r.text[:200]}")
     # Les vidéos épinglées peuvent remonter en tête : on prend la plus récente.
-    return max(vids, key=lambda v: v["create_time"])["view_count"]
+    latest = max(vids, key=lambda v: v["create_time"])
+    EXTRA["tta"] = latest["create_time"]
+    if latest.get("like_count") is not None:
+        EXTRA["ttl"] = latest["like_count"]
+    if latest.get("comment_count") is not None:
+        EXTRA["ttc"] = latest["comment_count"]
+    return latest["view_count"]
 
 
 # -------------------------------------------------------------- Instagram
@@ -198,13 +244,21 @@ def instagram_latest_views(tokens):
         else:
             log("refresh Instagram:", j)
     media = requests.get(f"{base}/me/media", params={
-        "fields": "id,timestamp,media_type,media_product_type",
+        "fields": "id,timestamp,media_type,media_product_type,like_count,comments_count",
         "limit": 25, "access_token": ig["token"]}, timeout=20).json().get("data", [])
     videos = [m for m in media if m.get("media_type") == "VIDEO"
               or m.get("media_product_type") == "REELS"]
     if not videos:
         raise RuntimeError("Instagram: aucune vidéo")
     latest = max(videos, key=lambda m: m["timestamp"])
+    try:
+        EXTRA["iga"] = datetime.strptime(latest["timestamp"], "%Y-%m-%dT%H:%M:%S%z").timestamp()
+    except (KeyError, ValueError):
+        pass
+    if latest.get("like_count") is not None:
+        EXTRA["igl"] = latest["like_count"]
+    if latest.get("comments_count") is not None:
+        EXTRA["igc"] = latest["comments_count"]
     views = None
     for metric in ("views", "plays"):  # « plays » = ancien nom pour les Reels
         j = requests.get(f"{base}/{latest['id']}/insights", params={
@@ -216,8 +270,10 @@ def instagram_latest_views(tokens):
             break
     if views is None:
         log(f"Instagram insights: {j}")
-    me = requests.get(f"{base}/me", params={"fields": "followers_count",
+    me = requests.get(f"{base}/me", params={"fields": "followers_count,media_count",
                                              "access_token": ig["token"]}, timeout=20).json()
+    if me.get("media_count") is not None:
+        EXTRA["ign"] = me["media_count"]
     return views, me.get("followers_count")
 
 
@@ -234,8 +290,47 @@ def french_spaces(text):
     return text.replace("« ", "«\u00a0")
 
 
-def write_e1002(stats, now):
-    """Fichier lu par le reTerminal E1002 : mêmes chiffres + la citation du jour."""
+def age_text(ts, now):
+    """« aujourd'hui », « hier », « il y a 3 j »… à partir d'une date de publication."""
+    days = (now.date() - datetime.fromtimestamp(ts, now.tzinfo).date()).days
+    if days <= 0:
+        return "aujourd’hui"
+    if days == 1:
+        return "hier"
+    if days < 60:
+        return f"il y a {days} j"
+    return f"il y a {days // 30} mois"
+
+
+def signed(n):
+    return ("+" if n >= 0 else "-") + fmt(abs(n))
+
+
+def follower_history(followers, now):
+    """Mémorise les abonnés du jour et renvoie ceux d'il y a 7 jours (ou du plus ancien relevé)."""
+    try:
+        hist = json.load(open(HISTORY))
+    except (OSError, ValueError):
+        hist = {}
+    today = now.date().isoformat()
+    day = hist.setdefault(today, {})
+    day.update({k: v for k, v in followers.items() if v is not None})
+    keep = sorted(hist)[-40:]
+    hist = {k: hist[k] for k in keep}
+    json.dump(hist, open(HISTORY, "w"), separators=(",", ":"), sort_keys=True)
+    week = [k for k in keep if k >= (now.date() - timedelta(days=7)).isoformat() and k < today]
+    return hist[week[0]] if week else {}
+
+
+def write_e1002(stats, now, followers):
+    """Fichier lu par le reTerminal E1002 : mêmes chiffres, infos en plus, citation du jour.
+
+    followers : abonnés bruts du relevé courant, par réseau (None si inconnu).
+    """
+    try:
+        old = json.load(open(E1002_OUT, encoding="utf-8"))
+    except (OSError, ValueError):
+        old = {}
     quote = quote_of_the_day(now.date())
     days = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"]
     months = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août",
@@ -243,6 +338,22 @@ def write_e1002(stats, now):
     date = f"{days[now.weekday()]} {'1er' if now.day == 1 else now.day} {months[now.month - 1]}"
     data = dict(stats, q=french_spaces(quote["q"]), r=quote["r"],
                 d=date, h=now.strftime("%H:%M"))
+    before = follower_history(followers, now)
+    for net in ("yt", "tt", "ig"):
+        # j'aime, commentaires, nombre de vidéos : valeur fraîche, sinon la précédente
+        for suffix in ("l", "c", "n"):
+            key = net + suffix
+            data[key] = fmt(EXTRA[key]) if EXTRA.get(key) is not None else old.get(key, "--")
+        data[net + "a"] = age_text(EXTRA[net + "a"], now) if EXTRA.get(net + "a") else old.get(net + "a", "")
+        cur, prev = followers.get(net), before.get(net)
+        data[net + "d"] = signed(cur - prev) if cur is not None and prev is not None else old.get(net + "d", "")
+    known = [v for v in followers.values() if v is not None]
+    if known:
+        data["tot"] = fmt(sum(known))
+        both = [k for k, v in followers.items() if v is not None and before.get(k) is not None]
+        data["totd"] = signed(sum(followers[k] - before[k] for k in both)) if both else ""
+    else:
+        data["tot"], data["totd"] = old.get("tot", "--"), old.get("totd", "")
     json.dump(data, open(E1002_OUT, "w", encoding="utf-8"),
               ensure_ascii=False, separators=(",", ":"))
 
@@ -271,11 +382,14 @@ def main():
     tokens = load_tokens()
     out = dict(old)
 
+    raw = {}
+
     def put(key, fn, *args):
         """Exécute fn ; en cas d'échec on garde la valeur précédente."""
         try:
             val = fn(*args)
             if val is not None:
+                raw[key] = val
                 out[key] = fmt(val)
         except Exception as e:
             log(f"[{key}] échec : {e}")
@@ -309,7 +423,7 @@ def main():
     out["t"] = now.strftime("%d/%m %H:%M")
     json.dump(out, open(OUT, "w"), separators=(",", ":"))
     try:
-        write_e1002(out, now)
+        write_e1002(out, now, {"yt": raw.get("ytf"), "tt": raw.get("ttf"), "ig": raw.get("igf")})
     except Exception as e:
         log(f"[e1002] échec : {e}")
     if tokens and os.environ.get("TOKENS_KEY"):
