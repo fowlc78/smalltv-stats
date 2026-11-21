@@ -32,13 +32,17 @@ REPLACE = {" ": " ", " ": " ", "‘": "’", "“": "« ", "”": " »",
 
 
 def fetch_html(chapter):
-    for attempt in range(4):
+    """Wikisource limite le débit : on patiente et on réessaie plusieurs fois."""
+    for attempt in range(7):
         r = requests.get(API, headers={"User-Agent": UA}, timeout=30, params={
             "action": "parse", "page": PAGE.format(chapter), "prop": "text",
             "format": "json", "formatversion": 2})
         if r.status_code == 200 and "parse" in r.json():
             return r.json()["parse"]["text"]
-        time.sleep(5 * (attempt + 1))
+        wait = r.headers.get("Retry-After", "")
+        wait = min(int(wait), 300) if wait.isdigit() else 20 * (attempt + 1)
+        print(f"chapitre {chapter} : HTTP {r.status_code}, nouvel essai dans {wait} s", file=sys.stderr)
+        time.sleep(wait)
     raise RuntimeError(f"chapitre {chapter} : HTTP {r.status_code} {r.text[:200]}")
 
 
@@ -125,7 +129,7 @@ def main():
                 if len(parts) > 1:
                     ref += f" ({i}/{len(parts)})"
                 quotes.append({"q": part, "r": ref})
-        time.sleep(1)
+        time.sleep(4)
     if len(quotes) < 400:
         raise RuntimeError(f"seulement {len(quotes)} entrées : source incomplète ?")
     OUT.write_text("[\n" + ",\n".join(" " + json.dumps(q, ensure_ascii=False) for q in quotes)
