@@ -23,7 +23,7 @@ API = "https://fr.wikisource.org/w/api.php"
 BOOK = "Les Quatre livres/"
 UA = "confucius-quotes-builder/1.0 (script GitHub Actions ; lecture ponctuelle)"
 OUT = Path(__file__).with_name("confucius.json")
-MAX_CHARS = 100000  # provisoire : mesure des longueurs
+MAX_CHARS = 3800  # au-delà, le passage ne tiendrait plus à l'écran, même en petits caractères
 ROMAN = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII", "XIII",
          "XIV", "XV", "XVI", "XVII", "XVIII", "XIX", "XX"]
 # Caractères que les polices de l'écran savent dessiner (même liste que « glyphs » du YAML)
@@ -153,7 +153,7 @@ def main():
             raise RuntimeError(f"chapitre {chapter} : aucun passage trouvé")
         print(f"Entretiens {chapter:2d} : {len(items)} passages", file=sys.stderr)
         for num, text in items:
-            add(text, f"Confucius, Entretiens, {ROMAN[chapter - 1]}.{num}")
+            add(text, f"Entretiens, {ROMAN[chapter - 1]}.{num}")
         time.sleep(2)
 
     items = list(paragraphs(fetch_html("La Grande étude"), unknown))
