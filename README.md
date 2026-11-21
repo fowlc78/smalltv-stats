@@ -16,13 +16,18 @@ Les jetons TikTok/Instagram sont stockés chiffrés dans `tokens.enc` (clé dans
 Le dossier `e1002/` contient la configuration [ESPHome](https://esphome.io) du reTerminal E1002. Elle affiche
 deux modules, répartis sur trois écrans (n'importe quel bouton passe au suivant) :
 
-1. stats des réseaux sociaux + citation du jour (écran par défaut) ;
-2. stats des réseaux sociaux en grand ;
-3. citation de Confucius du jour en grand.
+1. la page du jour : un passage de Confucius, puis le relevé des réseaux sociaux en tableau (écran par défaut) ;
+2. le relevé des réseaux sociaux en grand, lisible de loin ;
+3. le passage du jour seul, en grand.
 
-- `fetch_stats.py` écrit aussi `e1002.json` : les mêmes chiffres que `stats.json`, plus la citation du jour.
-- `e1002/confucius.json` : les citations (traductions maison des *Entretiens*, la numérotation des passages
-  varie selon les éditions). Une par jour, dans l'ordre, en boucle. On peut en ajouter ou en retirer librement.
+Le design suit l'idée d'une page imprimée : fond blanc, encre noire, filets fins, EB Garamond pour le texte,
+Inter pour les chiffres, et le rouge comme seule couleur d'accent.
+
+- `fetch_stats.py` écrit aussi `e1002.json` : les mêmes chiffres que `stats.json`, plus le passage du jour et la date.
+- `e1002/confucius.json` : le texte intégral des Entretiens, de la Grande Étude et de l'Invariable Milieu
+  (traduction de Séraphin Couvreur, 1895, domaine public, lue sur Wikisource). Un passage par jour, dans l'ordre,
+  en boucle ; les passages longs sont répartis sur plusieurs jours. Le fichier est reconstruit par
+  `e1002/build_confucius.py` (workflow « Reconstruire les citations de Confucius »).
 - `e1002/reterminal-e1002.yaml` : le firmware. Réveil toutes les 30 min (`sleep_minutes`), l'écran n'est
   redessiné que si quelque chose a changé, pour ménager la batterie.
 

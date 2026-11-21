@@ -314,11 +314,11 @@ font:
     id: i_fig_xl
     size: 88
     glyphs: *digits
-  # Sceau « Lunyu » (titre chinois des Entretiens)
+  # Sceau « Kongzi » (le nom chinois de Confucius)
   - file: { type: gfonts, family: Noto Serif SC, weight: 700 }
     id: f_seal
     size: 24
-    glyphs: "論語"
+    glyphs: "孔子"
 
 display:
   - platform: epaper_spi
@@ -452,10 +452,10 @@ display:
           it.print(R, cy, id(i_fig_xl), BLACK, TextAlign::CENTER_RIGHT, nets[i].views.c_str());
         }
       } else {
-        // ---- La citation seule, avec le sceau « Lunyu » en bas à droite
+        // ---- La citation seule, avec le sceau « Kongzi » en bas à droite
         const QFont fonts[] = {{id(g52), 62}, {id(g44), 52}, {id(g36), 44}, {id(g30), 37}, {id(g26), 32}, {id(g22), 27}};
         draw_quote(66, 384, fonts, 6);
         it.filled_rectangle(R - 40, 392, 40, 64, RED);
-        it.print(R - 20, 409, id(f_seal), WHITE, TextAlign::CENTER, "論");
-        it.print(R - 20, 439, id(f_seal), WHITE, TextAlign::CENTER, "語");
+        it.print(R - 20, 409, id(f_seal), WHITE, TextAlign::CENTER, "孔");
+        it.print(R - 20, 439, id(f_seal), WHITE, TextAlign::CENTER, "子");
       }
