@@ -1,0 +1,582 @@
+# reTerminal E1002 (écran e-paper couleur 7,3" 800x480) — configuration ESPHome
+#
+# Deux pages, on passe de l'une à l'autre avec n'importe quel bouton :
+#   0 = le passage de Confucius du jour, en entier (par défaut)
+#   1 = les réseaux sociaux
+#
+# L'appareil se réveille toutes les ${sleep_minutes} min, lit e1002.json (produit par
+# fetch_stats.py dans ce dépôt), ne redessine l'écran que si quelque chose a changé,
+# puis se rendort pour économiser la batterie.
+#
+# Installation : copier secrets.yaml.example en secrets.yaml, y mettre le Wi-Fi, puis
+#   esphome run reterminal-e1002.yaml
+
+substitutions:
+  data_url: "https://raw.githubusercontent.com/fowlc78/smalltv-stats/main/e1002.json"
+  sleep_minutes: "30"
+
+esphome:
+  name: reterminal-e1002
+  friendly_name: reTerminal E1002
+  on_boot:
+    priority: -100
+    then:
+      - script.execute: refresh
+
+esp32:
+  board: esp32-s3-devkitc-1
+  framework:
+    type: esp-idf
+
+logger:
+  hardware_uart: UART0 # le port USB-C passe par un convertisseur série sur l'UART0
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  fast_connect: true
+
+http_request:
+  verify_ssl: true
+  timeout: 15s
+
+json:
+
+globals:
+  - id: page
+    type: int
+    restore_value: true
+    initial_value: "0"
+  - id: last_hash # empreinte de ce qui est affiché, pour ne pas redessiner inutilement
+    type: uint32_t
+    restore_value: true
+    initial_value: "0"
+  - id: timer_wake
+    type: bool
+    initial_value: "false"
+  - id: data_ok
+    type: bool
+    initial_value: "false"
+  - id: need_draw
+    type: bool
+    initial_value: "false"
+  - id: s_yt
+    type: std::string
+    initial_value: '"--"'
+  - id: s_ytf
+    type: std::string
+    initial_value: '"--"'
+  - id: s_tt
+    type: std::string
+    initial_value: '"--"'
+  - id: s_ttf
+    type: std::string
+    initial_value: '"--"'
+  - id: s_ig
+    type: std::string
+    initial_value: '"--"'
+  - id: s_igf
+    type: std::string
+    initial_value: '"--"'
+  - id: s_time
+    type: std::string
+    initial_value: '""'
+  - id: s_quote
+    type: std::string
+    initial_value: '""'
+  - id: s_ref
+    type: std::string
+    initial_value: '""'
+  - id: s_date
+    type: std::string
+    initial_value: '""'
+  - id: s_ytd
+    type: std::string
+    initial_value: '""'
+  - id: s_ytl
+    type: std::string
+    initial_value: '""'
+  - id: s_ytc
+    type: std::string
+    initial_value: '""'
+  - id: s_yta
+    type: std::string
+    initial_value: '""'
+  - id: s_ttd
+    type: std::string
+    initial_value: '""'
+  - id: s_ttl
+    type: std::string
+    initial_value: '""'
+  - id: s_ttc
+    type: std::string
+    initial_value: '""'
+  - id: s_tta
+    type: std::string
+    initial_value: '""'
+  - id: s_igd
+    type: std::string
+    initial_value: '""'
+  - id: s_igl
+    type: std::string
+    initial_value: '""'
+  - id: s_igc
+    type: std::string
+    initial_value: '""'
+  - id: s_iga
+    type: std::string
+    initial_value: '""'
+  - id: s_tot
+    type: std::string
+    initial_value: '""'
+  - id: s_totd
+    type: std::string
+    initial_value: '""'
+  - id: s_hour
+    type: std::string
+    initial_value: '""'
+
+deep_sleep:
+  id: ds
+  sleep_duration: ${sleep_minutes}min
+  on_wake:
+    - lambda: "id(timer_wake) = (cause == deep_sleep::WAKEUP_CAUSE_TIMER);"
+  esp32_ext1_wakeup:
+    mode: ANY_LOW
+    pins:
+      - pin:
+          number: GPIO3
+          allow_other_uses: true
+        on_wake:
+          - lambda: "id(page) = (id(page) + 1) % 2;"
+      - pin:
+          number: GPIO4
+          allow_other_uses: true
+        on_wake:
+          - lambda: "id(page) = (id(page) + 1) % 2;"
+      - pin:
+          number: GPIO5
+          allow_other_uses: true
+        on_wake:
+          - lambda: "id(page) = (id(page) + 1) % 2;"
+
+# Les mêmes boutons, quand l'appareil est déjà réveillé
+binary_sensor:
+  - platform: gpio
+    id: btn_a
+    pin: { number: GPIO3, mode: INPUT_PULLUP, inverted: true, allow_other_uses: true }
+    filters: [delayed_on: 30ms]
+    on_press:
+      - script.execute: next_page
+  - platform: gpio
+    id: btn_b
+    pin: { number: GPIO4, mode: INPUT_PULLUP, inverted: true, allow_other_uses: true }
+    filters: [delayed_on: 30ms]
+    on_press:
+      - script.execute: next_page
+  - platform: gpio
+    id: btn_c
+    pin: { number: GPIO5, mode: INPUT_PULLUP, inverted: true, allow_other_uses: true }
+    filters: [delayed_on: 30ms]
+    on_press:
+      - script.execute: next_page
+
+# Mesure de la batterie (pont diviseur activé par GPIO21)
+switch:
+  - platform: gpio
+    id: battery_enable
+    pin: GPIO21
+    restore_mode: ALWAYS_ON
+
+sensor:
+  - platform: adc
+    id: battery_voltage
+    pin: GPIO1
+    attenuation: 12db
+    update_interval: never
+    filters:
+      - multiply: 2.0
+
+script:
+  - id: next_page
+    mode: single
+    then:
+      - lambda: |-
+          id(page) = (id(page) + 1) % 2;
+          id(timer_wake) = false;
+      - script.execute: refresh
+
+  - id: refresh
+    mode: restart
+    then:
+      - wait_until:
+          condition:
+            wifi.connected:
+          timeout: 30s
+      - lambda: "id(data_ok) = false;"
+      - if:
+          condition:
+            wifi.connected:
+          then:
+            - http_request.get:
+                url: ${data_url}
+                capture_response: true
+                max_response_buffer_size: 16384
+                on_response:
+                  then:
+                    - lambda: |-
+                        if (response->status_code != 200) {
+                          ESP_LOGW("e1002", "HTTP %d", response->status_code);
+                          return;
+                        }
+                        id(data_ok) = json::parse_json(body, [](JsonObject root) -> bool {
+                          if (!root["q"].is<const char *>()) return false;
+                          id(s_yt) = root["yt"] | "--";
+                          id(s_ytf) = root["ytf"] | "--";
+                          id(s_tt) = root["tt"] | "--";
+                          id(s_ttf) = root["ttf"] | "--";
+                          id(s_ig) = root["ig"] | "--";
+                          id(s_igf) = root["igf"] | "--";
+                          id(s_time) = root["t"] | "";
+                          id(s_quote) = root["q"] | "";
+                          id(s_ref) = root["r"] | "";
+                          id(s_date) = root["d"] | "";
+                          id(s_ytd) = root["ytd"] | "";
+                          id(s_ytl) = root["ytl"] | "";
+                          id(s_ytc) = root["ytc"] | "";
+                          id(s_yta) = root["yta"] | "";
+                          id(s_ttd) = root["ttd"] | "";
+                          id(s_ttl) = root["ttl"] | "";
+                          id(s_ttc) = root["ttc"] | "";
+                          id(s_tta) = root["tta"] | "";
+                          id(s_igd) = root["igd"] | "";
+                          id(s_igl) = root["igl"] | "";
+                          id(s_igc) = root["igc"] | "";
+                          id(s_iga) = root["iga"] | "";
+                          id(s_tot) = root["tot"] | "";
+                          id(s_totd) = root["totd"] | "";
+                          id(s_hour) = root["h"] | "";
+                          return true;
+                        });
+                on_error:
+                  then:
+                    - logger.log: "Lecture de e1002.json impossible"
+      - component.update: battery_voltage
+      - lambda: |-
+          // Empreinte de ce que montre l'écran courant (l'heure du relevé n'en fait pas partie)
+          uint32_t h = 2166136261u;
+          auto mix = [&](const std::string &s) {
+            for (unsigned char c : s) { h ^= c; h *= 16777619u; }
+            h ^= 0xff; h *= 16777619u;
+          };
+          mix(std::string(1, (char) ('0' + id(page))));
+          mix(id(s_date));
+          if (id(page) == 1) {
+            mix(id(s_yt)); mix(id(s_ytf)); mix(id(s_tt));
+            mix(id(s_ttf)); mix(id(s_ig)); mix(id(s_igf));
+            mix(id(s_ytd)); mix(id(s_ytl)); mix(id(s_ytc)); mix(id(s_yta));
+            mix(id(s_ttd)); mix(id(s_ttl)); mix(id(s_ttc)); mix(id(s_tta));
+            mix(id(s_igd)); mix(id(s_igl)); mix(id(s_igc)); mix(id(s_iga));
+            mix(id(s_tot)); mix(id(s_totd));
+          } else {
+            mix(id(s_quote)); mix(id(s_ref));
+          }
+          if (!id(data_ok)) {
+            // Pas de données : on ne touche à l'écran que si quelqu'un vient d'appuyer ou d'allumer
+            id(need_draw) = !id(timer_wake);
+            if (id(need_draw)) id(last_hash) = 0;
+          } else {
+            id(need_draw) = !id(timer_wake) || h != id(last_hash);
+            id(last_hash) = h;
+          }
+      - if:
+          condition:
+            lambda: "return id(need_draw);"
+          then:
+            - wait_until:
+                condition:
+                  lambda: "return !id(epaper).is_updating();"
+                timeout: 90s
+            - component.update: epaper
+            - delay: 2s
+            - wait_until:
+                condition:
+                  lambda: "return !id(epaper).is_updating();"
+                timeout: 90s
+            - delay: 1s
+      - deep_sleep.enter: ds
+
+spi:
+  clk_pin: GPIO7
+  mosi_pin: GPIO9
+
+font:
+  # Deux familles, deux rôles : EB Garamond porte la voix (le texte de Confucius),
+  # Inter porte les données (noms, chiffres, mentions).
+  - file: { type: gfonts, family: EB Garamond, weight: 500 }
+    id: g44
+    size: 44
+    glyphs: &latin
+      - " !\"%'()+,-./0123456789:;?[]§"
+      - "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+      - "abcdefghijklmnopqrstuvwxyz"
+      - "«»ÀÂÇÈÉÊËÎÏÔÙÛŒàâçèéêëîïôùûüœ’…–—·"
+      - "\u00a0"
+  - file: { type: gfonts, family: EB Garamond, weight: 500 }
+    id: g38
+    size: 38
+    glyphs: *latin
+  - file: { type: gfonts, family: EB Garamond, weight: 500 }
+    id: g32
+    size: 32
+    glyphs: *latin
+  - file: { type: gfonts, family: EB Garamond, weight: 500 }
+    id: g28
+    size: 28
+    glyphs: *latin
+  - file: { type: gfonts, family: EB Garamond, weight: 500 }
+    id: g24
+    size: 24
+    glyphs: *latin
+  - file: { type: gfonts, family: EB Garamond, weight: 500 }
+    id: g22
+    size: 22
+    glyphs: *latin
+  - file: { type: gfonts, family: EB Garamond, weight: 500 }
+    id: g20
+    size: 20
+    glyphs: *latin
+  - file: { type: gfonts, family: EB Garamond, weight: 500 }
+    id: g18
+    size: 18
+    glyphs: *latin
+  - file: { type: gfonts, family: EB Garamond, weight: 500 }
+    id: g16
+    size: 16
+    glyphs: *latin
+  - file: { type: gfonts, family: EB Garamond, weight: 500 }
+    id: g14
+    size: 14
+    glyphs: *latin
+  - file: { type: gfonts, family: EB Garamond, weight: 500 }
+    id: g13
+    size: 13
+    glyphs: *latin
+  - file: { type: gfonts, family: EB Garamond, weight: 500 }
+    id: g12
+    size: 12
+    glyphs: *latin
+  - file: { type: gfonts, family: EB Garamond, weight: 500, italic: true }
+    id: g_ref
+    size: 24
+    glyphs: *latin
+  - file: { type: gfonts, family: EB Garamond, weight: 500, italic: true }
+    id: g_ref_s
+    size: 20
+    glyphs: *latin
+  - file: { type: gfonts, family: Inter, weight: 500 }
+    id: i_meta
+    size: 16
+    glyphs: *latin
+  - file: { type: gfonts, family: Inter, weight: 600 }
+    id: i_meta_b
+    size: 16
+    glyphs: *latin
+  - file: { type: gfonts, family: Inter, weight: 500 }
+    id: i_label
+    size: 18
+    glyphs: *latin
+  - file: { type: gfonts, family: Inter, weight: 600 }
+    id: i_label_b
+    size: 18
+    glyphs: *latin
+  - file: { type: gfonts, family: Inter, weight: 500 }
+    id: i_text
+    size: 20
+    glyphs: *latin
+  - file: { type: gfonts, family: Inter, weight: 700 }
+    id: i_title
+    size: 24
+    glyphs: *latin
+  - file: { type: gfonts, family: Inter, weight: 700 }
+    id: i_value
+    size: 28
+    glyphs: *latin
+  - file: { type: gfonts, family: Inter, weight: 800 }
+    id: i_fig
+    size: 76
+    glyphs: "0123456789 .,kM-–"
+  # Sceau « Kongzi » (le nom chinois de Confucius), en grand et en petit
+  - file: { type: gfonts, family: Noto Serif SC, weight: 700 }
+    id: f_seal
+    size: 110
+    glyphs: "孔子"
+  - file: { type: gfonts, family: Noto Serif SC, weight: 700 }
+    id: f_seal_s
+    size: 40
+    glyphs: "孔子"
+
+# Logos des réseaux (icônes libres Simple Icons, CC0), en une couleur
+image:
+  - file: logos/youtube.png
+    id: logo_youtube
+    type: BINARY
+  - file: logos/tiktok.png
+    id: logo_tiktok
+    type: BINARY
+  - file: logos/instagram.png
+    id: logo_instagram
+    type: BINARY
+
+display:
+  - platform: epaper_spi
+    id: epaper
+    model: Seeed-reTerminal-E1002
+    update_interval: never
+    lambda: |-
+      const Color BLACK(0, 0, 0), WHITE(255, 255, 255), RED(255, 0, 0), BLUE(0, 0, 255);
+      const int W = 800, H = 480;
+      it.fill(WHITE);
+
+      auto text_width = [&](const std::string &s, display::BaseFont *f) {
+        int x1, y1, w, h;
+        it.get_text_bounds(0, 0, s.c_str(), f, TextAlign::TOP_LEFT, &x1, &y1, &w, &h);
+        return w;
+      };
+
+      // Découpe un texte en lignes qui tiennent dans max_w pixels
+      auto wrap = [&](const std::string &text, display::BaseFont *f, int max_w) {
+        std::vector<std::string> lines;
+        std::string line, word;
+        for (size_t i = 0; i <= text.size(); i++) {
+          if (i < text.size() && text[i] != ' ') { word += text[i]; continue; }
+          if (word.empty()) continue;
+          std::string trial = line.empty() ? word : line + " " + word;
+          if (!line.empty() && text_width(trial, f) > max_w) { lines.push_back(line); line = word; }
+          else line = trial;
+          word.clear();
+        }
+        if (!line.empty()) lines.push_back(line);
+        return lines;
+      };
+
+      // Mention en bas à droite : la date, ou une alerte en rouge
+      auto status = [&](int x, int y) {
+        float v = id(battery_voltage).state;
+        if (!id(data_ok))
+          it.print(x, y, id(i_meta), RED, TextAlign::BASELINE_RIGHT, "hors ligne");
+        else if (!std::isnan(v) && v > 2.8f && v < 3.45f)
+          it.print(x, y, id(i_meta), RED, TextAlign::BASELINE_RIGHT, "batterie faible");
+        else
+          it.print(x, y, id(i_meta), BLACK, TextAlign::BASELINE_RIGHT, id(s_date).c_str());
+      };
+
+      if (id(page) == 0) {
+        // ---- Le passage du jour, toujours en entier. Trois mises en page selon sa longueur :
+        //   0 = grand sceau rouge à gauche ; 1 = bandeau rouge étroit ; 2 = pleine largeur.
+        struct QFont { display::BaseFont *font; int line_h; };
+        struct Tier { int x0, x1, y0, y1, rule_y, base_y; std::vector<QFont> fonts; };
+        const Tier tiers[3] = {
+          {260, 760, 36, 392, 408, 436, {{id(g44), 53}, {id(g38), 46}, {id(g32), 38}, {id(g28), 34}, {id(g24), 29}}},
+          {100, 768, 24, 404, 416, 444, {{id(g24), 29}, {id(g22), 26}, {id(g20), 24}, {id(g18), 22}, {id(g16), 20}, {id(g14), 17}}},
+          {24, 776, 20, 408, 420, 448, {{id(g14), 17}, {id(g13), 16}, {id(g12), 15}}},
+        };
+        int t = 0, line_h = 0;
+        display::BaseFont *font = nullptr;
+        std::vector<std::string> lines;
+        bool fits = false;
+        if (id(s_quote).empty()) {
+          lines.push_back("Connexion impossible.");
+          lines.push_back("Nouvel essai dans ${sleep_minutes} min,");
+          lines.push_back("ou appuyez sur un bouton.");
+          font = id(g32); line_h = 38; fits = true;
+        }
+        for (t = 0; t < 3 && !fits; t++) {
+          for (auto &f : tiers[t].fonts) {
+            font = f.font; line_h = f.line_h;
+            lines = wrap(id(s_quote), font, tiers[t].x1 - tiers[t].x0);
+            if ((int) lines.size() * line_h <= tiers[t].y1 - tiers[t].y0) { fits = true; break; }
+          }
+          if (fits) break;
+        }
+        if (t > 2) t = 2;
+        const Tier &g = tiers[t];
+        if (!fits) {  // ne devrait pas arriver : on coupe proprement
+          lines.resize((g.y1 - g.y0) / line_h);
+          lines.back() += " …";
+        }
+        if (t == 0) {
+          it.filled_rectangle(0, 0, 220, H, RED);
+          it.print(110, 150, id(f_seal), WHITE, TextAlign::CENTER, "孔");
+          it.print(110, 280, id(f_seal), WHITE, TextAlign::CENTER, "子");
+          it.print(110, 430, id(g_ref), WHITE, TextAlign::CENTER, "Confucius");
+        } else if (t == 1) {
+          it.filled_rectangle(0, 0, 72, H, RED);
+          it.print(36, 58, id(f_seal_s), WHITE, TextAlign::CENTER, "孔");
+          it.print(36, 106, id(f_seal_s), WHITE, TextAlign::CENTER, "子");
+        } else {
+          it.filled_rectangle(0, 0, W, 6, RED);
+        }
+        int y = g.y0 + (t == 2 ? 0 : (g.y1 - g.y0 - (int) lines.size() * line_h) / 2);
+        for (auto &l : lines) {
+          it.print(g.x0, y, font, BLACK, TextAlign::TOP_LEFT, l.c_str());
+          y += line_h;
+        }
+        it.filled_rectangle(g.x0, g.rule_y, g.x1 - g.x0, 1, BLACK);
+        if (t == 2)
+          it.print(g.x0, g.base_y, id(g_ref_s), RED, TextAlign::BASELINE_LEFT, id(s_ref).c_str());
+        else
+          it.print(g.x0, g.base_y, id(g_ref), RED, TextAlign::BASELINE_LEFT, id(s_ref).c_str());
+        status(g.x1, g.base_y);
+      } else {
+        // ---- Les réseaux sociaux : une colonne par réseau, tête en couleur, détails sur blanc
+        auto val = [](const std::string &s) { return s == "--" || s.empty() ? std::string("–") : s; };
+        struct Net {
+          const char *name; Color ink; image::Image *logo;
+          std::string subs, delta, views, likes, comments, age;
+        };
+        const Net nets[3] = {
+          {"YouTube", RED, id(logo_youtube), val(id(s_ytf)), id(s_ytd), val(id(s_yt)), val(id(s_ytl)), val(id(s_ytc)), id(s_yta)},
+          {"TikTok", BLACK, id(logo_tiktok), val(id(s_ttf)), id(s_ttd), val(id(s_tt)), val(id(s_ttl)), val(id(s_ttc)), id(s_tta)},
+          {"Instagram", BLUE, id(logo_instagram), val(id(s_igf)), id(s_igd), val(id(s_ig)), val(id(s_igl)), val(id(s_igc)), id(s_iga)},
+        };
+        for (int i = 0; i < 3; i++) {
+          const Net &n = nets[i];
+          const int x = 16 + i * 260, w = 248, l = x + 20, r = x + w - 20;
+          it.filled_rectangle(x, 16, w, 384, n.ink);
+          it.filled_rectangle(x + 3, 216, w - 6, 181, WHITE);
+          // Tête : logo, nom, abonnés
+          it.image(l, 30, n.logo, WHITE, n.ink);
+          it.print(l + 44, 46, id(i_title), WHITE, TextAlign::CENTER_LEFT, n.name);
+          it.print(l, 124, id(i_fig), WHITE, TextAlign::CENTER_LEFT, n.subs.c_str());
+          it.print(l, 186, id(i_label_b), WHITE, TextAlign::CENTER_LEFT, "abonnés");
+          if (!n.delta.empty())
+            it.printf(r, 186, id(i_label_b), WHITE, TextAlign::CENTER_RIGHT, "%s en 7 j", n.delta.c_str());
+          // Détails de la dernière vidéo
+          if (n.age.empty())
+            it.print(l, 244, id(i_meta_b), BLACK, TextAlign::CENTER_LEFT, "Dernière vidéo");
+          else
+            it.printf(l, 244, id(i_meta_b), BLACK, TextAlign::CENTER_LEFT, "Dernière vidéo, %s", n.age.c_str());
+          const char *labels[3] = {"vues", "j’aime", "commentaires"};
+          const std::string *values[3] = {&n.views, &n.likes, &n.comments};
+          for (int j = 0; j < 3; j++) {
+            const int y = 286 + j * 40;
+            it.print(l, y, id(i_label), BLACK, TextAlign::CENTER_LEFT, labels[j]);
+            it.print(r, y, id(i_value), BLACK, TextAlign::CENTER_RIGHT, values[j]->c_str());
+            it.filled_rectangle(l, y + 20, r - l, 1, BLACK);
+          }
+        }
+        // Pied : total des abonnés, évolution, date et heure du relevé
+        std::string total = val(id(s_tot)) + " abonnés au total";
+        it.print(16, 440, id(i_value), BLACK, TextAlign::CENTER_LEFT, total.c_str());
+        if (!id(s_totd).empty())
+          it.printf(16 + text_width(total, id(i_value)) + 16, 442, id(i_text), BLACK, TextAlign::CENTER_LEFT,
+                    "%s en 7 jours", id(s_totd).c_str());
+        float v = id(battery_voltage).state;
+        if (!id(data_ok))
+          it.print(784, 442, id(i_meta), RED, TextAlign::CENTER_RIGHT, "hors ligne");
+        else if (!std::isnan(v) && v > 2.8f && v < 3.45f)
+          it.print(784, 442, id(i_meta), RED, TextAlign::CENTER_RIGHT, "batterie faible");
+        else
+          it.printf(784, 442, id(i_meta), BLACK, TextAlign::CENTER_RIGHT, "%s, %s", id(s_date).c_str(), id(s_hour).c_str());
+      }
