@@ -1,5 +1,7 @@
-"""Construit confucius.json : le texte intégral des Entretiens de Confucius.
+"""Construit confucius.json : le texte intégral des écrits attribués à Confucius.
 
+Trois livres : les Entretiens, la Grande Étude et l'Invariable Milieu (ceux que Wikisource
+classe sous Confucius ; le quatrième des Quatre livres est de Mencius).
 Source : traduction française de Séraphin Couvreur (Les Quatre livres, 1895, domaine public),
 lue sur Wikisource. Chaque passage devient une entrée ; les passages trop longs pour l'écran
 sont découpés en plusieurs parties (une par jour), de sorte que tout le texte est utilisé.
@@ -17,33 +19,36 @@ from pathlib import Path
 import requests
 
 API = "https://fr.wikisource.org/w/api.php"
-PAGE = "Les Quatre livres/Entretiens de Confucius/{:02d}"
+BOOK = "Les Quatre livres/"
 UA = "confucius-quotes-builder/1.0 (script GitHub Actions ; lecture ponctuelle)"
 OUT = Path(__file__).with_name("confucius.json")
 MAX_CHARS = 560  # au-delà, le passage est découpé en plusieurs jours
 ROMAN = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII", "XIII",
          "XIV", "XV", "XVI", "XVII", "XVIII", "XIX", "XX"]
 # Caractères que les polices de l'écran savent dessiner (même liste que « glyphs » du YAML)
-ALLOWED = set(" !\"%'()+,-./0123456789:;?[]"
+ALLOWED = set(" !\"%'()+,-./0123456789:;?[]§"
               "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
               "«»ÀÂÇÈÉÊËÎÏÔÙÛŒàâçèéêëîïôùûüœ’…–—· ")
 REPLACE = {" ": " ", " ": " ", "‘": "’", "“": "« ", "”": " »",
            "æ": "ae", "Æ": "AE", "ʼ": "’", "′": "’", "`": "’", "*": "", "=": "", "_": " "}
 
 
-def fetch_html(chapter):
-    """Wikisource limite le débit : on patiente et on réessaie plusieurs fois."""
-    for attempt in range(7):
+def fetch_html(title):
+    """Wikisource limite parfois le débit : on patiente et on réessaie."""
+    for attempt in range(6):
         r = requests.get(API, headers={"User-Agent": UA}, timeout=30, params={
-            "action": "parse", "page": PAGE.format(chapter), "prop": "text",
+            "action": "parse", "page": BOOK + title, "prop": "text",
             "format": "json", "formatversion": 2})
-        if r.status_code == 200 and "parse" in r.json():
-            return r.json()["parse"]["text"]
+        if r.status_code == 200:
+            data = r.json()
+            if "parse" in data:
+                return data["parse"]["text"]
+            raise RuntimeError(f"{title} : {data.get('error', data)}")
         wait = r.headers.get("Retry-After", "")
         wait = min(int(wait), 300) if wait.isdigit() else 20 * (attempt + 1)
-        print(f"chapitre {chapter} : HTTP {r.status_code}, nouvel essai dans {wait} s", file=sys.stderr)
+        print(f"{title} : HTTP {r.status_code}, nouvel essai dans {wait} s", file=sys.stderr)
         time.sleep(wait)
-    raise RuntimeError(f"chapitre {chapter} : HTTP {r.status_code} {r.text[:200]}")
+    raise RuntimeError(f"{title} : HTTP {r.status_code} {r.text[:200]}")
 
 
 def clean(text, unknown):
@@ -70,17 +75,32 @@ def clean(text, unknown):
     return text.replace("« ", "« ")
 
 
-def passages(page_html, unknown):
-    """Liste [(numéro, texte)] des passages numérotés d'un chapitre."""
+FRENCH = set("le la les des du une dans pour pas il au aux ce sur par elle ses son leur leurs "
+             "nous vous je".split())
+
+
+def paragraphs(page_html, unknown):
+    """Paragraphes français d'une page (l'édition mêle aussi chinois transcrit et latin)."""
     page_html = re.sub(r"<style.*?</style>", "", page_html, flags=re.S)
     page_html = re.sub(r'<div id="headertemplate".*?</div>\s*</div>', "", page_html, flags=re.S)
     page_html = re.sub(r"<sup.*?</sup>", "", page_html, flags=re.S)       # appels de note
     page_html = re.sub(r"<ol class=\"references\".*?</ol>", "", page_html, flags=re.S)
-    result = []
     for para in re.findall(r"<p>(.*?)</p>", page_html, flags=re.S):
-        text = clean(re.sub(r"<[^>]+>", "", para), unknown)
-        if not text:
+        raw = html.unescape(re.sub(r"<[^>]+>", "", para))
+        if re.search(r"[\u2e80-\u9fff]", raw):        # notice du traducteur citant le chinois
             continue
+        words = re.findall(r"[a-zàâçéèêëîïôùûüœ]+", raw.lower())
+        if not words or sum(w in FRENCH for w in words) / len(words) < 0.07:
+            continue
+        text = clean(raw, unknown)
+        if text and not text.startswith("Mon maître Tch"):   # avertissement de Tchou Hi
+            yield text
+
+
+def passages(page_html, unknown):
+    """Liste [(numéro, texte)] des passages numérotés d'un chapitre."""
+    result = []
+    for text in paragraphs(page_html, unknown):
         m = re.match(r"(\d+)\.\s*(.+)", text)
         if m and (not result or int(m.group(1)) in (result[-1][0] + 1, result[-1][0] + 2)
                   or int(m.group(1)) == 1):
@@ -117,19 +137,34 @@ def split_parts(text):
 
 def main():
     unknown, quotes = {}, []
+
+    def add(text, ref):
+        parts = split_parts(text)
+        for i, part in enumerate(parts, 1):
+            quotes.append({"q": part, "r": ref + (f" ({i}/{len(parts)})" if len(parts) > 1 else "")})
+
     for chapter in range(1, 21):
-        items = passages(fetch_html(chapter), unknown)
+        # Sur Wikisource, la page du chapitre 10 n'a pas de barre oblique dans son titre
+        title = "Entretiens de Confucius10" if chapter == 10 else f"Entretiens de Confucius/{chapter:02d}"
+        items = passages(fetch_html(title), unknown)
         if not items:
             raise RuntimeError(f"chapitre {chapter} : aucun passage trouvé")
-        print(f"chapitre {chapter:2d} : {len(items)} passages", file=sys.stderr)
+        print(f"Entretiens {chapter:2d} : {len(items)} passages", file=sys.stderr)
         for num, text in items:
-            parts = split_parts(text)
-            for i, part in enumerate(parts, 1):
-                ref = f"Entretiens, {ROMAN[chapter - 1]}.{num}"
-                if len(parts) > 1:
-                    ref += f" ({i}/{len(parts)})"
-                quotes.append({"q": part, "r": ref})
-        time.sleep(4)
+            add(text, f"Entretiens, {ROMAN[chapter - 1]}.{num}")
+        time.sleep(2)
+
+    items = list(paragraphs(fetch_html("La Grande étude"), unknown))
+    print(f"Grande Étude : {len(items)} paragraphes", file=sys.stderr)
+    for num, text in enumerate(items, 1):
+        add(text, f"La Grande Étude, § {num}")
+    time.sleep(2)
+
+    items = passages(fetch_html("L’Invariable milieu"), unknown)
+    print(f"Invariable Milieu : {len(items)} articles", file=sys.stderr)
+    for num, text in items:
+        add(text, f"L’Invariable Milieu, {num}")
+
     if len(quotes) < 400:
         raise RuntimeError(f"seulement {len(quotes)} entrées : source incomplète ?")
     OUT.write_text("[\n" + ",\n".join(" " + json.dumps(q, ensure_ascii=False) for q in quotes)

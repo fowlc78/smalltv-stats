@@ -1,9 +1,9 @@
 # reTerminal E1002 (écran e-paper couleur 7,3" 800x480) — configuration ESPHome
 #
 # Trois écrans, on passe de l'un à l'autre avec n'importe quel bouton :
-#   0 = stats réseaux sociaux + citation du jour (écran par défaut)
-#   1 = stats réseaux sociaux en grand
-#   2 = citation de Confucius du jour en grand
+#   0 = page du jour : passage des Entretiens de Confucius + relevé des réseaux (par défaut)
+#   1 = relevé des réseaux sociaux en grand
+#   2 = passage du jour seul, en grand
 #
 # L'appareil se réveille toutes les ${sleep_minutes} min, lit e1002.json (produit par
 # fetch_stats.py dans ce dépôt), ne redessine l'écran que si quelque chose a changé,
@@ -86,6 +86,12 @@ globals:
     type: std::string
     initial_value: '""'
   - id: s_ref
+    type: std::string
+    initial_value: '""'
+  - id: s_date
+    type: std::string
+    initial_value: '""'
+  - id: s_hour
     type: std::string
     initial_value: '""'
 
@@ -174,7 +180,7 @@ script:
             - http_request.get:
                 url: ${data_url}
                 capture_response: true
-                max_response_buffer_size: 4096
+                max_response_buffer_size: 8192
                 on_response:
                   then:
                     - lambda: |-
@@ -193,6 +199,8 @@ script:
                           id(s_time) = root["t"] | "";
                           id(s_quote) = root["q"] | "";
                           id(s_ref) = root["r"] | "";
+                          id(s_date) = root["d"] | "";
+                          id(s_hour) = root["h"] | "";
                           return true;
                         });
                 on_error:
@@ -200,13 +208,14 @@ script:
                     - logger.log: "Lecture de e1002.json impossible"
       - component.update: battery_voltage
       - lambda: |-
-          // Empreinte de ce que montre l'écran courant (l'heure de mise à jour n'en fait pas partie)
+          // Empreinte de ce que montre l'écran courant (l'heure du relevé n'en fait pas partie)
           uint32_t h = 2166136261u;
           auto mix = [&](const std::string &s) {
             for (unsigned char c : s) { h ^= c; h *= 16777619u; }
             h ^= 0xff; h *= 16777619u;
           };
           mix(std::string(1, (char) ('0' + id(page))));
+          mix(id(s_date));
           if (id(page) != 2) {
             mix(id(s_yt)); mix(id(s_ytf)); mix(id(s_tt));
             mix(id(s_ttf)); mix(id(s_ig)); mix(id(s_igf));
@@ -242,58 +251,74 @@ spi:
   mosi_pin: GPIO9
 
 font:
-  # Texte courant
-  - file: { type: gfonts, family: Inter, weight: 500 }
-    id: f_small
-    size: 18
+  # Deux familles, deux rôles : EB Garamond porte la voix (citation, date),
+  # Inter porte les données (noms, chiffres, mentions).
+  - file: { type: gfonts, family: EB Garamond, weight: 500 }
+    id: g52
+    size: 52
     glyphs: &latin
-      - " !\"%'()+,-./0123456789:;?"
+      - " !\"%'()+,-./0123456789:;?[]§"
       - "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
       - "abcdefghijklmnopqrstuvwxyz"
       - "«»ÀÂÇÈÉÊËÎÏÔÙÛŒàâçèéêëîïôùûüœ’…–—·"
       - " "
-  - file: { type: gfonts, family: Inter, weight: 700 }
-    id: f_title
-    size: 24
-    glyphs: *latin
-  - file: { type: gfonts, family: Inter, weight: 600 }
-    id: f_med
-    size: 28
-    glyphs: *latin
-  # Grands chiffres
-  - file: { type: gfonts, family: Inter, weight: 800 }
-    id: f_num
-    size: 64
-    glyphs: &digits "0123456789 .,kM-"
-  - file: { type: gfonts, family: Inter, weight: 800 }
-    id: f_num_xl
-    size: 92
-    glyphs: *digits
-  # Citation
   - file: { type: gfonts, family: EB Garamond, weight: 500 }
-    id: f_quote_xl
-    size: 50
+    id: g44
+    size: 44
     glyphs: *latin
   - file: { type: gfonts, family: EB Garamond, weight: 500 }
-    id: f_quote_l
-    size: 42
+    id: g36
+    size: 36
     glyphs: *latin
   - file: { type: gfonts, family: EB Garamond, weight: 500 }
-    id: f_quote_m
-    size: 34
+    id: g30
+    size: 30
     glyphs: *latin
   - file: { type: gfonts, family: EB Garamond, weight: 500 }
-    id: f_quote_s
-    size: 28
-    glyphs: *latin
-  - file: { type: gfonts, family: EB Garamond, weight: 500 }
-    id: f_quote_xs
-    size: 23
-    glyphs: *latin
-  - file: { type: gfonts, family: EB Garamond, weight: 500, italic: true }
-    id: f_ref
+    id: g26
     size: 26
     glyphs: *latin
+  - file: { type: gfonts, family: EB Garamond, weight: 500 }
+    id: g22
+    size: 22
+    glyphs: *latin
+  - file: { type: gfonts, family: EB Garamond, weight: 500 }
+    id: g19
+    size: 19
+    glyphs: *latin
+  - file: { type: gfonts, family: EB Garamond, weight: 500, italic: true }
+    id: g_ref
+    size: 24
+    glyphs: *latin
+  - file: { type: gfonts, family: Inter, weight: 500 }
+    id: i_meta
+    size: 16
+    glyphs: *latin
+  - file: { type: gfonts, family: Inter, weight: 500 }
+    id: i_text
+    size: 22
+    glyphs: *latin
+  - file: { type: gfonts, family: Inter, weight: 600 }
+    id: i_label
+    size: 22
+    glyphs: *latin
+  - file: { type: gfonts, family: Inter, weight: 600 }
+    id: i_name
+    size: 30
+    glyphs: *latin
+  - file: { type: gfonts, family: Inter, weight: 700 }
+    id: i_fig
+    size: 30
+    glyphs: &digits "0123456789 .,kM-–"
+  - file: { type: gfonts, family: Inter, weight: 800 }
+    id: i_fig_xl
+    size: 88
+    glyphs: *digits
+  # Sceau « Lunyu » (titre chinois des Entretiens)
+  - file: { type: gfonts, family: Noto Serif SC, weight: 700 }
+    id: f_seal
+    size: 24
+    glyphs: "論語"
 
 display:
   - platform: epaper_spi
@@ -301,32 +326,37 @@ display:
     model: Seeed-reTerminal-E1002
     update_interval: never
     lambda: |-
-      const Color BLACK(0, 0, 0), WHITE(255, 255, 255), RED(255, 0, 0);
-      const Color YELLOW(255, 255, 0), BLUE(0, 0, 255), GREEN(0, 255, 0);
-      const int W = 800, H = 480;
+      // Une page imprimée : fond blanc, encre noire, filets fins, et le rouge comme seule
+      // couleur d'accent (référence de la citation, sceau, alertes). Le bleu ne sert qu'à
+      // repérer Instagram dans le tableau.
+      const Color BLACK(0, 0, 0), WHITE(255, 255, 255), RED(255, 0, 0), BLUE(0, 0, 255);
+      const int W = 800, M = 40, R = W - M;  // marges gauche et droite
       it.fill(WHITE);
 
-      struct Net { const char *name; Color bg; Color fg; const std::string *views; const std::string *subs; };
+      // Une valeur manquante (« -- ») s'affiche comme un simple tiret
+      auto val = [](const std::string &s) { return s == "--" || s.empty() ? std::string("–") : s; };
+      struct Net { const char *name; Color ink; std::string views; std::string subs; };
       const Net nets[3] = {
-        {"YouTube", RED, WHITE, &id(s_yt), &id(s_ytf)},
-        {"TikTok", BLACK, WHITE, &id(s_tt), &id(s_ttf)},
-        {"Instagram", BLUE, WHITE, &id(s_ig), &id(s_igf)},
+        {"YouTube", RED, val(id(s_yt)), val(id(s_ytf))},
+        {"TikTok", BLACK, val(id(s_tt)), val(id(s_ttf))},
+        {"Instagram", BLUE, val(id(s_ig)), val(id(s_igf))},
+      };
+
+      auto text_width = [&](const std::string &s, display::BaseFont *f) {
+        int x1, y1, w, h;
+        it.get_text_bounds(0, 0, s.c_str(), f, TextAlign::TOP_LEFT, &x1, &y1, &w, &h);
+        return w;
       };
 
       // Découpe un texte en lignes qui tiennent dans max_w pixels
       auto wrap = [&](const std::string &text, display::BaseFont *f, int max_w) {
         std::vector<std::string> lines;
         std::string line, word;
-        auto width = [&](const std::string &s) {
-          int x1, y1, w, h;
-          it.get_text_bounds(0, 0, s.c_str(), f, TextAlign::TOP_LEFT, &x1, &y1, &w, &h);
-          return w;
-        };
         for (size_t i = 0; i <= text.size(); i++) {
           if (i < text.size() && text[i] != ' ') { word += text[i]; continue; }
           if (word.empty()) continue;
           std::string trial = line.empty() ? word : line + " " + word;
-          if (!line.empty() && width(trial) > max_w) { lines.push_back(line); line = word; }
+          if (!line.empty() && text_width(trial, f) > max_w) { lines.push_back(line); line = word; }
           else line = trial;
           word.clear();
         }
@@ -334,80 +364,98 @@ display:
         return lines;
       };
 
-      // Citation centrée entre y0 et y1, avec la plus grande police qui tient
+      // En-tête : la date à gauche, l'heure du relevé (ou une alerte) à droite, puis un filet
+      auto masthead = [&]() {
+        it.print(M, 42, id(g26), BLACK, TextAlign::BASELINE_LEFT,
+                 id(s_date).empty() ? "reTerminal" : id(s_date).c_str());
+        float v = id(battery_voltage).state;
+        if (!id(data_ok))
+          it.print(R, 42, id(i_meta), RED, TextAlign::BASELINE_RIGHT, "hors ligne");
+        else if (!std::isnan(v) && v > 2.8f && v < 3.45f)
+          it.print(R, 42, id(i_meta), RED, TextAlign::BASELINE_RIGHT, "batterie faible");
+        else
+          it.printf(R, 42, id(i_meta), BLACK, TextAlign::BASELINE_RIGHT, "relevé à %s", id(s_hour).c_str());
+        it.filled_rectangle(M, 54, R - M, 2, BLACK);
+      };
+
+      // Citation alignée à gauche, centrée en hauteur entre y0 et y1, avec la plus grande
+      // police qui tient. Si rien ne tient, on coupe et on termine par « … ».
       struct QFont { display::BaseFont *font; int line_h; };
       auto draw_quote = [&](int y0, int y1, const QFont *fonts, int n_fonts) {
         if (id(s_quote).empty()) {
-          it.print(W / 2, (y0 + y1) / 2, id(f_med), BLACK, TextAlign::CENTER, "Connexion impossible");
-          it.print(W / 2, (y0 + y1) / 2 + 36, id(f_small), BLACK, TextAlign::CENTER,
+          it.print(M, (y0 + y1) / 2 - 20, id(g36), BLACK, TextAlign::CENTER_LEFT, "Connexion impossible.");
+          it.print(M, (y0 + y1) / 2 + 24, id(i_meta), BLACK, TextAlign::CENTER_LEFT,
                    "Nouvel essai dans ${sleep_minutes} min, ou appuyez sur un bouton.");
           return;
         }
-        const int ref_h = 40, max_w = W - 96;
+        const int ref_h = 38, max_w = R - M;
         std::vector<std::string> lines;
-        int line_h = 0;
+        int line_h = 0, cap = 0;
         display::BaseFont *font = nullptr;
         for (int i = 0; i < n_fonts; i++) {
           font = fonts[i].font;
           line_h = fonts[i].line_h;
+          cap = (y1 - y0 - ref_h) / line_h;
           lines = wrap(id(s_quote), font, max_w);
-          if ((int) lines.size() * line_h + ref_h <= y1 - y0) break;
+          if ((int) lines.size() <= cap) break;
+        }
+        if ((int) lines.size() > cap) {
+          lines.resize(cap);
+          std::string &last = lines.back();
+          while (!last.empty() && text_width(last + " …", font) > max_w) {
+            size_t sp = last.find_last_of(' ');
+            last = sp == std::string::npos ? "" : last.substr(0, sp);
+          }
+          last += " …";
+        } else if (lines.size() > 1 && lines.back().find(' ') == std::string::npos) {
+          // Évite un mot seul sur la dernière ligne : on resserre un peu la colonne
+          for (int w = max_w - 24; w > max_w - 240; w -= 24) {
+            auto alt = wrap(id(s_quote), font, w);
+            if (alt.size() != lines.size()) break;
+            if (alt.back().find(' ') != std::string::npos) { lines = alt; break; }
+          }
         }
         int total = (int) lines.size() * line_h + ref_h;
         int y = y0 + (y1 - y0 - total) / 2;
-        if (y < y0) y = y0;
         for (auto &l : lines) {
-          it.print(W / 2, y, font, BLACK, TextAlign::TOP_CENTER, l.c_str());
+          it.print(M, y, font, BLACK, TextAlign::TOP_LEFT, l.c_str());
           y += line_h;
         }
-        it.printf(W / 2, y + 8, id(f_ref), RED, TextAlign::TOP_CENTER, "Confucius, %s", id(s_ref).c_str());
+        it.printf(M, y + 8, id(g_ref), RED, TextAlign::TOP_LEFT, "Confucius, %s", id(s_ref).c_str());
       };
 
-      // Pied de page : heure des données à gauche, batterie à droite
-      auto footer = [&]() {
-        if (!id(data_ok))
-          it.print(16, H - 8, id(f_small), RED, TextAlign::BOTTOM_LEFT, "hors ligne");
-        else
-          it.printf(16, H - 8, id(f_small), BLACK, TextAlign::BOTTOM_LEFT, "maj %s", id(s_time).c_str());
-        float v = id(battery_voltage).state;
-        if (!std::isnan(v) && v > 2.8f) {
-          int pct = (int) ((v - 3.30f) / (4.15f - 3.30f) * 100.0f + 0.5f);
-          if (pct < 0) pct = 0;
-          if (pct > 100) pct = 100;
-          it.printf(W - 16, H - 8, id(f_small), pct < 15 ? RED : BLACK, TextAlign::BOTTOM_RIGHT,
-                    "batterie %d %%", pct);
-        }
-      };
-
+      masthead();
       if (id(page) == 0) {
-        // ---- Écran combiné : 3 cartes en haut, citation en dessous
+        // ---- Page du jour : la citation mène, le relevé des réseaux suit en tableau
+        const QFont fonts[] = {{id(g44), 52}, {id(g36), 44}, {id(g30), 37}, {id(g26), 32}, {id(g22), 27}, {id(g19), 24}};
+        draw_quote(66, 280, fonts, 6);
+        it.filled_rectangle(M, 292, R - M, 2, BLACK);
+        it.print(560, 312, id(i_meta), BLACK, TextAlign::CENTER_RIGHT, "vues, dernière vidéo");
+        it.print(R, 312, id(i_meta), BLACK, TextAlign::CENTER_RIGHT, "abonnés");
         for (int i = 0; i < 3; i++) {
-          const int x = 16 + i * 260, y = 14, w = 248, h = 200;
-          it.filled_rectangle(x, y, w, h, nets[i].bg);
-          it.filled_rectangle(x + 3, y + 44, w - 6, h - 47, WHITE);
-          it.print(x + w / 2, y + 22, id(f_title), nets[i].fg, TextAlign::CENTER, nets[i].name);
-          it.print(x + w / 2, y + 92, id(f_num), BLACK, TextAlign::CENTER, nets[i].views->c_str());
-          it.print(x + w / 2, y + 144, id(f_small), BLACK, TextAlign::CENTER, "vues, dernière vidéo");
-          it.printf(x + w / 2, y + 174, id(f_small), BLACK, TextAlign::CENTER, "%s abonnés", nets[i].subs->c_str());
+          const int cy = 348 + i * 42;
+          if (i > 0) it.filled_rectangle(M, cy - 21, R - M, 1, BLACK);
+          it.filled_rectangle(M, cy - 6, 12, 12, nets[i].ink);
+          it.print(M + 24, cy, id(i_label), BLACK, TextAlign::CENTER_LEFT, nets[i].name);
+          it.print(560, cy, id(i_fig), BLACK, TextAlign::CENTER_RIGHT, nets[i].views.c_str());
+          it.print(R, cy, id(i_text), BLACK, TextAlign::CENTER_RIGHT, nets[i].subs.c_str());
         }
-        const QFont fonts[] = {{id(f_quote_m), 42}, {id(f_quote_s), 35}, {id(f_quote_xs), 29}};
-        draw_quote(226, 446, fonts, 3);
       } else if (id(page) == 1) {
-        // ---- Stats en grand : une ligne par réseau
-        it.print(16, 12, id(f_title), BLACK, TextAlign::TOP_LEFT, "Vues de la dernière vidéo");
+        // ---- Relevé en grand : une ligne par réseau, lisible de loin
+        it.print(R, 76, id(i_meta), BLACK, TextAlign::CENTER_RIGHT, "vues de la dernière vidéo");
         for (int i = 0; i < 3; i++) {
-          const int x = 16, y = 54 + i * 132, w = 768, h = 120;
-          it.filled_rectangle(x, y, w, h, nets[i].bg);
-          it.filled_rectangle(x + 240, y + 3, w - 243, h - 6, WHITE);
-          it.print(x + 120, y + h / 2, id(f_med), nets[i].fg, TextAlign::CENTER, nets[i].name);
-          it.printf(x + 262, y + h / 2, id(f_med), BLACK, TextAlign::CENTER_LEFT, "%s abonnés", nets[i].subs->c_str());
-          it.print(x + w - 22, y + h / 2, id(f_num_xl), BLACK, TextAlign::CENTER_RIGHT, nets[i].views->c_str());
+          const int cy = 150 + i * 122;
+          if (i > 0) it.filled_rectangle(M, cy - 61, R - M, 1, BLACK);
+          it.filled_rectangle(M, cy - 26, 16, 16, nets[i].ink);
+          it.print(M + 30, cy - 18, id(i_name), BLACK, TextAlign::CENTER_LEFT, nets[i].name);
+          it.printf(M + 30, cy + 22, id(i_text), BLACK, TextAlign::CENTER_LEFT, "%s abonnés", nets[i].subs.c_str());
+          it.print(R, cy, id(i_fig_xl), BLACK, TextAlign::CENTER_RIGHT, nets[i].views.c_str());
         }
       } else {
-        // ---- Citation du jour en grand
-        it.print(W / 2, 30, id(f_title), RED, TextAlign::CENTER, "CONFUCIUS");
-        it.filled_rectangle(W / 2 - 40, 52, 80, 3, RED);
-        const QFont fonts[] = {{id(f_quote_xl), 62}, {id(f_quote_l), 52}, {id(f_quote_m), 42}, {id(f_quote_s), 35}};
-        draw_quote(72, 440, fonts, 4);
+        // ---- La citation seule, avec le sceau « Lunyu » en bas à droite
+        const QFont fonts[] = {{id(g52), 62}, {id(g44), 52}, {id(g36), 44}, {id(g30), 37}, {id(g26), 32}, {id(g22), 27}};
+        draw_quote(66, 384, fonts, 6);
+        it.filled_rectangle(R - 40, 392, 40, 64, RED);
+        it.print(R - 20, 409, id(f_seal), WHITE, TextAlign::CENTER, "論");
+        it.print(R - 20, 439, id(f_seal), WHITE, TextAlign::CENTER, "語");
       }
-      footer();

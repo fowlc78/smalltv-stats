@@ -237,7 +237,12 @@ def french_spaces(text):
 def write_e1002(stats, now):
     """Fichier lu par le reTerminal E1002 : mêmes chiffres + la citation du jour."""
     quote = quote_of_the_day(now.date())
-    data = dict(stats, q=french_spaces(quote["q"]), r=quote["r"])
+    days = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"]
+    months = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août",
+              "septembre", "octobre", "novembre", "décembre"]
+    date = f"{days[now.weekday()]} {'1er' if now.day == 1 else now.day} {months[now.month - 1]}"
+    data = dict(stats, q=french_spaces(quote["q"]), r=quote["r"],
+                d=date, h=now.strftime("%H:%M"))
     json.dump(data, open(E1002_OUT, "w", encoding="utf-8"),
               ensure_ascii=False, separators=(",", ":"))
 
