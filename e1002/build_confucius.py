@@ -22,7 +22,7 @@ API = "https://fr.wikisource.org/w/api.php"
 BOOK = "Les Quatre livres/"
 UA = "confucius-quotes-builder/1.0 (script GitHub Actions ; lecture ponctuelle)"
 OUT = Path(__file__).with_name("confucius.json")
-MAX_CHARS = 560  # au-delà, le passage est découpé en plusieurs jours
+MAX_CHARS = 420  # au-delà, le passage est découpé en plusieurs jours
 ROMAN = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII", "XIII",
          "XIV", "XV", "XVI", "XVII", "XVIII", "XIX", "XX"]
 # Caractères que les polices de l'écran savent dessiner (même liste que « glyphs » du YAML)
@@ -114,7 +114,8 @@ def split_parts(text):
     """Découpe un long passage aux fins de phrase, en parties de taille voisine."""
     if len(text) <= MAX_CHARS:
         return [text]
-    sentences = re.findall(r".+?(?:[.!?»](?=\s)|$)\s*", text)
+    # Une phrase finit par . ! ? (avec son guillemet fermant éventuel), jamais avant le « » »
+    sentences = re.findall(r".+?(?:[.!?…](?:\u00a0»)?[)]?(?=\s)|$)\s*", text)
     n = -(-len(text) // MAX_CHARS)
     target = len(text) / n
     parts, cur = [], ""
@@ -151,7 +152,7 @@ def main():
             raise RuntimeError(f"chapitre {chapter} : aucun passage trouvé")
         print(f"Entretiens {chapter:2d} : {len(items)} passages", file=sys.stderr)
         for num, text in items:
-            add(text, f"Entretiens, {ROMAN[chapter - 1]}.{num}")
+            add(text, f"Confucius, Entretiens, {ROMAN[chapter - 1]}.{num}")
         time.sleep(2)
 
     items = list(paragraphs(fetch_html("La Grande étude"), unknown))

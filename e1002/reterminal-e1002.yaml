@@ -421,7 +421,7 @@ display:
           it.print(M, y, font, BLACK, TextAlign::TOP_LEFT, l.c_str());
           y += line_h;
         }
-        it.printf(M, y + 8, id(g_ref), RED, TextAlign::TOP_LEFT, "Confucius, %s", id(s_ref).c_str());
+        it.print(M, y + 8, id(g_ref), RED, TextAlign::TOP_LEFT, id(s_ref).c_str());
       };
 
       masthead();
