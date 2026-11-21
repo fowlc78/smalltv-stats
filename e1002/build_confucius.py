@@ -3,8 +3,9 @@
 Trois livres : les Entretiens, la Grande Étude et l'Invariable Milieu (ceux que Wikisource
 classe sous Confucius ; le quatrième des Quatre livres est de Mencius).
 Source : traduction française de Séraphin Couvreur (Les Quatre livres, 1895, domaine public),
-lue sur Wikisource. Chaque passage devient une entrée ; les passages trop longs pour l'écran
-sont découpés en plusieurs parties (une par jour), de sorte que tout le texte est utilisé.
+lue sur Wikisource. Chaque passage devient une entrée, affichée en entier sur une journée :
+l'écran réduit la taille du texte pour les passages longs. Seuls les rares passages qui ne
+tiendraient pas même en petits caractères sont répartis sur plusieurs jours.
 
 Usage : python build_confucius.py   (écrit confucius.json à côté de ce fichier)
 """
@@ -22,7 +23,7 @@ API = "https://fr.wikisource.org/w/api.php"
 BOOK = "Les Quatre livres/"
 UA = "confucius-quotes-builder/1.0 (script GitHub Actions ; lecture ponctuelle)"
 OUT = Path(__file__).with_name("confucius.json")
-MAX_CHARS = 420  # au-delà, le passage est découpé en plusieurs jours
+MAX_CHARS = 100000  # provisoire : mesure des longueurs
 ROMAN = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII", "XIII",
          "XIV", "XV", "XVI", "XVII", "XVIII", "XIX", "XX"]
 # Caractères que les polices de l'écran savent dessiner (même liste que « glyphs » du YAML)
@@ -161,17 +162,27 @@ def main():
         add(text, f"La Grande Étude, § {num}")
     time.sleep(2)
 
-    items = passages(fetch_html("L’Invariable milieu"), unknown)
-    print(f"Invariable Milieu : {len(items)} articles", file=sys.stderr)
-    for num, text in items:
-        add(text, f"L’Invariable Milieu, {num}")
+    # L'Invariable Milieu : chaque paragraphe est un passage, rattaché à son article numéroté
+    article, part = 0, 0
+    count = 0
+    for text in paragraphs(fetch_html("L’Invariable milieu"), unknown):
+        m = re.match(r"(\d+)\.\s*(.+)", text)
+        if m and int(m.group(1)) in (article + 1, article + 2):
+            article, part, text = int(m.group(1)), 0, m.group(2)
+        if not article:
+            continue
+        part += 1
+        count += 1
+        add(text, f"L’Invariable Milieu, {article}" + (f", § {part}" if part > 1 else ""))
+    print(f"Invariable Milieu : {article} articles, {count} paragraphes", file=sys.stderr)
 
     if len(quotes) < 400:
         raise RuntimeError(f"seulement {len(quotes)} entrées : source incomplète ?")
     OUT.write_text("[\n" + ",\n".join(" " + json.dumps(q, ensure_ascii=False) for q in quotes)
                    + "\n]\n", encoding="utf-8")
-    print(f"{len(quotes)} entrées, la plus longue : {max(len(q['q']) for q in quotes)} caractères",
-          file=sys.stderr)
+    sizes = sorted(len(q["q"]) for q in quotes)
+    print(f"{len(quotes)} entrées, la plus longue : {sizes[-1]} caractères ; "
+          f"les 12 plus longues : {sizes[-12:]}", file=sys.stderr)
     if unknown:
         print("caractères ignorés :", unknown, file=sys.stderr)
 
