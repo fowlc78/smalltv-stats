@@ -23,11 +23,14 @@ deux pages, et n'importe quel bouton passe de l'une à l'autre :
 - `fetch_stats.py` écrit aussi `e1002.json` : les mêmes chiffres que `stats.json`, plus le passage du jour, la date
   et des infos en plus par réseau (j'aime, commentaires, date et nombre de vidéos, évolution des abonnés sur
   7 jours, total). L'historique des abonnés est tenu dans `e1002/history.json`.
+- Les chiffres de `e1002.json` ne sont réécrits qu'une fois par jour (au premier relevé du jour), comme la
+  citation, pour éviter que l'écran se redessine à chaque variation. Un lancement manuel du workflow
+  « Mise à jour des stats » force la mise à jour. `stats.json` (SmallTV) reste mis à jour à chaque relevé.
 - `e1002/confucius.json` : le texte intégral des Entretiens, de la Grande Étude et de l'Invariable Milieu
   (traduction de Séraphin Couvreur, 1895, domaine public, lue sur Wikisource), soit 618 passages. Un passage
   entier par jour, dans l'ordre, en boucle. Le fichier est reconstruit par `e1002/build_confucius.py`
   (workflow « Reconstruire les citations de Confucius »).
-- `e1002/reterminal-e1002.yaml` : le firmware. Réveil toutes les 30 min (`sleep_minutes`), l'écran n'est
+- `e1002/reterminal-e1002.yaml` : le firmware. Réveil toutes les 12 h (`sleep_minutes`), l'écran n'est
   redessiné que si quelque chose a changé, pour ménager la batterie.
 
 Installation (une seule fois, câble USB-C branché sur l'ordinateur) :

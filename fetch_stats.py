@@ -334,6 +334,8 @@ def follower_history(followers, now):
 def write_e1002(stats, now, followers):
     """Fichier lu par le reTerminal E1002 : mêmes chiffres, infos en plus, citation du jour.
 
+    Réécrit une seule fois par jour (au premier relevé du jour), sauf lancement manuel.
+
     followers : abonnés bruts du relevé courant, par réseau (None si inconnu).
     """
     try:
@@ -363,6 +365,12 @@ def write_e1002(stats, now, followers):
         data["totd"] = signed(sum(followers[k] - before[k] for k in both)) if both else ""
     else:
         data["tot"], data["totd"] = old.get("tot", "--"), old.get("totd", "")
+    # L'écran e-paper se redessine en entier (~30 s) à chaque changement : on fige donc
+    # les chiffres une fois par jour, comme la citation. Un lancement manuel du workflow
+    # (workflow_dispatch) force la mise à jour.
+    forced = os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch"
+    if old.get("d") == date and old.get("q") and not forced:
+        return
     json.dump(data, open(E1002_OUT, "w", encoding="utf-8"),
               ensure_ascii=False, separators=(",", ":"))
 
