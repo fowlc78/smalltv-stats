@@ -3,6 +3,7 @@
 Lancé une seule fois par plateforme via le workflow « Ajouter un jeton ».
 Les valeurs arrivent par des secrets GitHub (jamais en clair dans le dépôt) :
   IG_TOKEN_INIT      jeton Instagram généré dans le tableau de bord Meta
+  IG_USER_ID         identifiant du compte Instagram (connexion unifiée uniquement, pas secret)
   TIKTOK_AUTH_CODE   code renvoyé par TikTok après l'autorisation
 """
 import os
@@ -20,11 +21,17 @@ tokens = fs.load_tokens()
 
 ig = os.environ.get("IG_TOKEN_INIT", "").strip()
 if ig:
-    r = requests.get("https://graph.instagram.com/me",
-                     params={"fields": "username,followers_count", "access_token": ig}, timeout=20).json()
+    ig_id = os.environ.get("IG_USER_ID", "").strip()
+    fields = {"fields": "username,followers_count", "access_token": ig}
+    entry = {"token": ig, "refreshed_at": 0}
+    r = requests.get("https://graph.instagram.com/me", params=fields, timeout=20).json()
+    if "username" not in r and ig_id:
+        # Connexion unifiée : jeton d'utilisateur système, à utiliser sur graph.facebook.com
+        r = requests.get(f"https://graph.facebook.com/{ig_id}", params=fields, timeout=20).json()
+        entry["ig_id"] = ig_id
     if "username" not in r:
-        sys.exit(f"Jeton Instagram refusé : {r}")
-    tokens["instagram"] = {"token": ig, "refreshed_at": 0}
+        sys.exit(f"Jeton Instagram refusé : {r.get('error', {}).get('message', r)}")
+    tokens["instagram"] = entry
     print(f"Instagram OK : @{r['username']}, {r.get('followers_count')} abonnés")
 
 code = unquote(os.environ.get("TIKTOK_AUTH_CODE", "").strip())

@@ -24,6 +24,7 @@ jobs:
         env:
           TOKENS_KEY: ${{ secrets.TOKENS_KEY }}
           IG_TOKEN_INIT: ${{ secrets.IG_TOKEN_INIT }}
+          IG_USER_ID: "17841441312661300"   # identifiant du compte Instagram (pas secret)
           TIKTOK_AUTH_CODE: ${{ secrets.TIKTOK_AUTH_CODE }}
           TIKTOK_CLIENT_KEY: ${{ secrets.TIKTOK_CLIENT_KEY }}
           TIKTOK_CLIENT_SECRET: ${{ secrets.TIKTOK_CLIENT_SECRET }}
