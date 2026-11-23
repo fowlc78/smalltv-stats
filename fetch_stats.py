@@ -234,18 +234,27 @@ def instagram_latest_views(tokens):
     ig = tokens.get("instagram")
     if not ig:
         return None
-    base = "https://graph.instagram.com"
+    # Deux types de jetons :
+    #  - connexion Instagram (ancienne) : graph.instagram.com/me, jeton de 60 j à prolonger ;
+    #  - connexion unifiée (apps Meta récentes) : graph.facebook.com/<id du compte Instagram>,
+    #    jeton d'utilisateur système sans expiration (ig["ig_id"] est alors renseigné).
+    unified = bool(ig.get("ig_id"))
+    base = "https://graph.facebook.com" if unified else "https://graph.instagram.com"
+    who = ig["ig_id"] if unified else "me"
     # Jeton longue durée (60 j) : on le prolonge une fois par semaine.
-    if time.time() - ig.get("refreshed_at", 0) > 7 * 86400:
+    if not unified and time.time() - ig.get("refreshed_at", 0) > 7 * 86400:
         j = requests.get(f"{base}/refresh_access_token", params={
             "grant_type": "ig_refresh_token", "access_token": ig["token"]}, timeout=20).json()
         if "access_token" in j:
             ig.update(token=j["access_token"], refreshed_at=time.time())
         else:
             log("refresh Instagram:", j)
-    media = requests.get(f"{base}/me/media", params={
+    media = requests.get(f"{base}/{who}/media", params={
         "fields": "id,timestamp,media_type,media_product_type,like_count,comments_count",
-        "limit": 25, "access_token": ig["token"]}, timeout=20).json().get("data", [])
+        "limit": 25, "access_token": ig["token"]}, timeout=20).json()
+    if "error" in media:
+        raise RuntimeError(f"Instagram: {media['error'].get('message')}")
+    media = media.get("data", [])
     videos = [m for m in media if m.get("media_type") == "VIDEO"
               or m.get("media_product_type") == "REELS"]
     if not videos:
@@ -270,7 +279,7 @@ def instagram_latest_views(tokens):
             break
     if views is None:
         log(f"Instagram insights: {j}")
-    me = requests.get(f"{base}/me", params={"fields": "followers_count,media_count",
+    me = requests.get(f"{base}/{who}", params={"fields": "followers_count,media_count",
                                              "access_token": ig["token"]}, timeout=20).json()
     if me.get("media_count") is not None:
         EXTRA["ign"] = me["media_count"]
