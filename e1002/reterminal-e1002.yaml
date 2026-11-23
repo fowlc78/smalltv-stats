@@ -13,7 +13,7 @@
 
 substitutions:
   data_url: "https://raw.githubusercontent.com/fowlc78/smalltv-stats/main/e1002.json"
-  sleep_minutes: "30"
+  sleep_minutes: "720"   # 12 h
 
 esphome:
   name: reterminal-e1002

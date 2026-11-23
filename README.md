@@ -30,7 +30,7 @@ deux pages, et n'importe quel bouton passe de l'une à l'autre :
   (traduction de Séraphin Couvreur, 1895, domaine public, lue sur Wikisource), soit 618 passages. Un passage
   entier par jour, dans l'ordre, en boucle. Le fichier est reconstruit par `e1002/build_confucius.py`
   (workflow « Reconstruire les citations de Confucius »).
-- `e1002/reterminal-e1002.yaml` : le firmware. Réveil toutes les 30 min (`sleep_minutes`), l'écran n'est
+- `e1002/reterminal-e1002.yaml` : le firmware. Réveil toutes les 12 h (`sleep_minutes`), l'écran n'est
   redessiné que si quelque chose a changé, pour ménager la batterie.
 
 Installation (une seule fois, câble USB-C branché sur l'ordinateur) :
