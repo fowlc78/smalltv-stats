@@ -43,11 +43,16 @@ if code:
         "grant_type": "authorization_code",
         "redirect_uri": REDIRECT,
     }, timeout=20).json()
-    if "access_token" not in j:
+    if "access_token" in j:
+        tokens["tiktok"] = {"access_token": j["access_token"], "refresh_token": j["refresh_token"],
+                            "expires_at": time.time() + int(j.get("expires_in", 86400))}
+        print("TikTok OK, scopes :", j.get("scope"))
+    elif ig:
+        # Un ancien code TikTok déjà utilisé traîne dans les secrets : on ne bloque pas Instagram.
+        print("TikTok ignoré (code déjà utilisé ou expiré) :",
+              {k: v for k, v in j.items() if "token" not in k})
+    else:
         sys.exit(f"Échange TikTok refusé : { {k: v for k, v in j.items() if 'token' not in k} }")
-    tokens["tiktok"] = {"access_token": j["access_token"], "refresh_token": j["refresh_token"],
-                        "expires_at": time.time() + int(j.get("expires_in", 86400))}
-    print("TikTok OK, scopes :", j.get("scope"))
 
 if not (ig or code):
     sys.exit("Aucun jeton fourni.")
